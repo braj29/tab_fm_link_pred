@@ -1,7 +1,7 @@
 
 # Tabular FM Link Prediction
 
-This repo hosts a tiny benchmark that compares two tabular foundation models—[TabICL](https://github.com/yandex-research/tabicl) and [TabPFN](https://github.com/automl/TabPFN)—on the FB15k-237 knowledge graph link-prediction task. We turn the triples (head, relation, tail) into a tabular classification problem where the model must predict the tail entity given the head and relation. The current setup keeps everything intentionally small so it can be run on a laptop while still exercising the full training/evaluation pipeline.
+This repo hosts a tiny benchmark that compares two tabular foundation models—[TabICL](https://github.com/yandex-research/tabicl) and [TabPFN](https://github.com/automl/TabPFN)—on the FB15k-237 knowledge graph link-prediction task. We turn the triples (head, relation, tail) into a tabular classification problem where the model must predict the tail entity given the head and relation. Experiments default to the full FB15k-237 splits, but you can cap them for quick local smoke tests.
 
 ## Environment
 
@@ -26,14 +26,21 @@ Use the `src/run.py` entry point (remember to point `PYTHONPATH` at `src/` if yo
 PYTHONPATH=src python src/run.py --model tabicl
 ```
 
+For a faster smoke test you can limit each split, e.g.:
+
+```bash
+PYTHONPATH=src python src/run.py --model tabicl --max-train 2000 --max-valid 500 --max-test 500
+```
+
 Key arguments:
 
 - `--model {tabicl, tabpfn}` (default: `tabicl`)
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`)
+- `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data)
 
 The script performs the following steps:
 
-1. Loads FB15k-237 and subsamples to a small train/valid/test split (2k/500/500) via `src/data.py`.
+1. Loads FB15k-237 via `src/data.py` (subsampling only if you pass `--max-*` flags).
 2. Builds the requested classifier (`TabICLClassifier` or `TabPFNClassifier`) from `src/model.py`.
 3. Trains on the tabular data and prints validation accuracy plus test accuracy and link-prediction metrics (MRR, Hits@k) computed in `src/metrics.py`.
 
@@ -62,4 +69,4 @@ requirements.txt
 pyproject.toml
 ```
 
-Feel free to adapt the subsampling sizes, add more models, or integrate richer evaluation/reporting as you iterate on the experiments.
+Feel free to adapt the subsampling sizes via CLI, add more models, or integrate richer evaluation/reporting as you iterate on the experiments.

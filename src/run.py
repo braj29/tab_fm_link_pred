@@ -10,10 +10,21 @@ def main():
     parser.add_argument("--model", type=str, default="tabicl",
         choices=["tabicl", "tabpfn"])
     parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--max-train", type=int, default=None,
+        help="Optional train split size cap (None keeps full FB15k-237 train set).")
+    parser.add_argument("--max-valid", type=int, default=None,
+        help="Optional validation split size cap.")
+    parser.add_argument("--max-test", type=int, default=None,
+        help="Optional test split size cap.")
     args = parser.parse_args()
 
     print("=== Loading data (small experiment) ===")
-    X_train, y_train, X_valid, y_valid, X_test, y_test = prepare_data()
+    X_train, y_train, X_valid, y_valid, X_test, y_test = prepare_data(
+        max_train=args.max_train,
+        max_valid=args.max_valid,
+        max_test=args.max_test,
+    )
+    print(f"Splits -> train: {len(X_train)}, valid: {len(X_valid)}, test: {len(X_test)}")
 
     if args.model == "tabicl":
         print("=== Building TabICL ===")

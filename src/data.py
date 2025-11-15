@@ -22,14 +22,18 @@ def make_categorical(df):
     return df
 
 
-def subsample(df, max_n, seed=42):
-    if len(df) <= max_n:
+def subsample(df, max_n=None, seed=42):
+    if max_n is None or len(df) <= max_n:
         return df.copy()
     return df.sample(n=max_n, random_state=seed).copy()
 
 
-def prepare_data(max_train=2000, max_valid=500, max_test=500):
-    """Loads + cleans dataset for a small initial experiment."""
+def prepare_data(max_train=None, max_valid=None, max_test=None):
+    """
+    Load + clean the FB15k-237 dataset and optionally subsample.
+
+    Args default to None which keeps the full split sizes.
+    """
     train, valid, test = load_fb15k237()
 
     train = subsample(train, max_train)
