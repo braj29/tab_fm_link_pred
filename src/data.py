@@ -2,14 +2,40 @@
 import pandas as pd
 from datasets import load_dataset
 
+_TRIPLE_COLUMN_CANDIDATES = [
+    ("head", "relation", "tail"),
+    ("from", "rel", "to"),
+    ("from", "relation", "to"),
+    ("subject", "predicate", "object"),
+    ("s", "p", "o"),
+    ("head_id", "relation_id", "tail_id"),
+]
+
+
+def _resolve_triple_columns(ds):
+    column_names = ds["train"].column_names
+    column_lookup = {col.lower(): col for col in column_names}
+    for cols in _TRIPLE_COLUMN_CANDIDATES:
+        lowered = [col.lower() for col in cols]
+        if all(col in column_lookup for col in lowered):
+            return tuple(column_lookup[col] for col in lowered)
+    if len(column_names) >= 3:
+        return tuple(column_names[:3])
+    raise ValueError(
+        f"Could not find triple columns in FB15k-237 dataset. "
+        f"Available columns: {sorted(column_lookup.values())}"
+    )
+
+
 def load_fb15k237():
     ds = load_dataset("KGraph/FB15k-237")
+    head_col, rel_col, tail_col = _resolve_triple_columns(ds)
 
     def to_df(split):
         return pd.DataFrame({
-            "head": ds[split]["head"],
-            "relation": ds[split]["relation"],
-            "tail": ds[split]["tail"],
+            "head": ds[split][head_col],
+            "relation": ds[split][rel_col],
+            "tail": ds[split][tail_col],
         })
 
     return to_df("train"), to_df("validation"), to_df("test")
