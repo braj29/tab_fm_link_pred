@@ -1,0 +1,6 @@
+tabicl
+tabpfn
+datasets
+pandas
+numpy
+scikit-learn
