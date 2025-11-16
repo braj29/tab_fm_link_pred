@@ -68,13 +68,6 @@ def load_fb15k237():
     return to_df("train"), to_df("validation"), to_df("test")
 
 
-def make_categorical(df):
-    """Convert columns to pandas categorical while keeping raw strings."""
-    for col in df.columns:
-        df[col] = df[col].astype("category")
-    return df
-
-
 def subsample(df, max_n=None, seed=42):
     if max_n is None or len(df) <= max_n:
         return df.copy()
@@ -93,10 +86,7 @@ def prepare_data(max_train=None, max_valid=None, max_test=None):
     valid = subsample(valid, max_valid)
     test = subsample(test, max_test)
 
-    # Convert to categorical with raw identifiers preserved
-    train = make_categorical(train)
-    valid = make_categorical(valid)
-    test = make_categorical(test)
+    # Keep raw string/object dtypes so TabICL/TabPFN can run their own preprocessing.
 
     # Features (head, relation), label (tail)
     X_train, y_train = train[["head", "relation"]], train["tail"]
