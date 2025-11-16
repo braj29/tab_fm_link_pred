@@ -1,5 +1,6 @@
 # metrics.py
 import numpy as np
+import pandas as pd
 from sklearn.metrics import accuracy_score
 
 
@@ -14,8 +15,12 @@ def link_prediction_metrics(clf, X, y_true, hits_ks=(1, 3, 10)):
     ranks = []
     hits = {k: 0 for k in hits_ks}
 
-    # Convert y_true categories → category codes
-    y_codes = y_true.cat.codes.to_numpy()
+    # Map ground-truth labels to the model's class ordering
+    classes = np.asarray(clf.classes_)
+    y_codes = pd.Categorical(y_true, categories=classes).codes
+    if (y_codes < 0).any():
+        missing = y_true.iloc[y_codes < 0].unique()
+        raise ValueError(f"Found labels not present in classifier classes: {missing}")
 
     for i, gold in enumerate(y_codes):
         rank = np.where(sorted_idx[i] == gold)[0][0] + 1
