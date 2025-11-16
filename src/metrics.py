@@ -1,14 +1,42 @@
 # metrics.py
+"""Evaluation helpers for classification and link prediction."""
+
+from typing import Mapping, Sequence
+
 import numpy as np
 import pandas as pd
+from sklearn.base import ClassifierMixin
 from sklearn.metrics import accuracy_score
 
 
-def classification_accuracy(clf, X, y):
+def classification_accuracy(
+    clf: ClassifierMixin,
+    X: pd.DataFrame,
+    y: pd.Series,
+) -> float:
+    """Return accuracy for ``clf`` on ``(X, y)``."""
+
     return accuracy_score(y, clf.predict(X))
 
 
-def link_prediction_metrics(clf, X, y_true, hits_ks=(1, 3, 10)):
+def link_prediction_metrics(
+    clf: ClassifierMixin,
+    X: pd.DataFrame,
+    y_true: pd.Series,
+    hits_ks: Sequence[int] = (1, 3, 10),
+) -> Mapping[str, float]:
+    """Compute MRR and Hits@k link-prediction metrics.
+
+    Args:
+        clf: Fitted classifier exposing ``predict_proba`` and ``classes_``.
+        X: Feature dataframe.
+        y_true: Ground-truth labels for ``X``.
+        hits_ks: The ``k`` cutoffs for Hits@k.
+
+    Returns:
+        Dictionary with ``MRR`` plus ``Hits@k`` entries.
+    """
+
     proba = clf.predict_proba(X)   # shape: [n, n_classes]
     sorted_idx = np.argsort(-proba, axis=1)
 

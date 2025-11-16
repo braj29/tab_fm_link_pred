@@ -1,8 +1,12 @@
 # data.py
-import pandas as pd
-from datasets import load_dataset
+"""Utilities for loading and preparing the FB15k-237 triples."""
 
-_TRIPLE_COLUMN_CANDIDATES = [
+from typing import Iterable, List, Optional, Sequence, Tuple
+
+import pandas as pd
+from datasets import DatasetDict, load_dataset
+
+_TRIPLE_COLUMN_CANDIDATES: Sequence[Tuple[str, str, str]] = [
     ("head", "relation", "tail"),
     ("from", "rel", "to"),
     ("from", "relation", "to"),
@@ -12,7 +16,17 @@ _TRIPLE_COLUMN_CANDIDATES = [
 ]
 
 
-def _resolve_triple_columns(ds):
+def _resolve_triple_columns(ds: DatasetDict) -> Optional[Tuple[str, str, str]]:
+    """Return the triple column names if they can be inferred.
+
+    Args:
+        ds: Hugging Face dataset dict containing FB15k-237 splits.
+
+    Returns:
+        Tuple of `(head, relation, tail)` column names when resolvable; otherwise
+        ``None`` which signals fallback parsing logic.
+    """
+
     column_names = ds["train"].column_names
     column_lookup = {col.lower(): col for col in column_names}
     for cols in _TRIPLE_COLUMN_CANDIDATES:
@@ -24,8 +38,23 @@ def _resolve_triple_columns(ds):
     return None
 
 
-def _parse_text_triples(text_rows):
-    heads, rels, tails = [], [], []
+def _parse_text_triples(text_rows: Iterable[str]) -> Tuple[List[str], List[str], List[str]]:
+    """Parse tab- or space-delimited triples from a text column.
+
+    Args:
+        text_rows: Iterable with one string per row from the dataset.
+
+    Returns:
+        Three lists with heads, relations, and tails.
+
+    Raises:
+        ValueError: If a row cannot be split into at least three tokens or no
+            triples were parsed at all.
+    """
+
+    heads: List[str] = []
+    rels: List[str] = []
+    tails: List[str] = []
     for row in text_rows:
         line = row.strip()
         if not line:
@@ -46,7 +75,9 @@ def _parse_text_triples(text_rows):
     return heads, rels, tails
 
 
-def load_fb15k237():
+def load_fb15k237() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load FB15k-237 splits from Hugging Face and normalize column names."""
+
     ds = load_dataset("KGraph/FB15k-237")
     head_rel_tail = _resolve_triple_columns(ds)
 
@@ -68,18 +99,41 @@ def load_fb15k237():
     return to_df("train"), to_df("validation"), to_df("test")
 
 
-def subsample(df, max_n=None, seed=42):
+def subsample(df: pd.DataFrame, max_n: Optional[int] = None, seed: int = 42) -> pd.DataFrame:
+    """Return a copy of ``df`` with at most ``max_n`` rows.
+
+    Args:
+        df: Input dataframe.
+        max_n: Optional cap on the number of rows.
+        seed: RNG seed for reproducible sampling when ``max_n`` is smaller
+            than the dataframe length.
+
+    Returns:
+        A dataframe copy (subsampled if needed).
+    """
+
     if max_n is None or len(df) <= max_n:
         return df.copy()
     return df.sample(n=max_n, random_state=seed).copy()
 
 
-def prepare_data(max_train=None, max_valid=None, max_test=None):
-    """
-    Load + clean the FB15k-237 dataset and optionally subsample.
+def prepare_data(
+    max_train: Optional[int] = None,
+    max_valid: Optional[int] = None,
+    max_test: Optional[int] = None,
+ ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    """Load, optionally subsample, and split FB15k-237 into features/labels.
 
-    Args default to None which keeps the full split sizes.
+    Args:
+        max_train: Optional cap for the train split size.
+        max_valid: Optional cap for the validation split size.
+        max_test: Optional cap for the test split size.
+
+    Returns:
+        Tuple of pandas objects ``(X_train, y_train, X_valid, y_valid, X_test,
+        y_test)`` ready for classifier ``fit``/``predict`` calls.
     """
+
     train, valid, test = load_fb15k237()
 
     train = subsample(train, max_train)

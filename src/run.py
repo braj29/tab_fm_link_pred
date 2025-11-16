@@ -1,11 +1,15 @@
 # run_experiment.py
+"""CLI entry point for benchmarking TabICL/TabPFN on FB15k-237."""
+
 import argparse
+
 from data import prepare_data
 from model import build_tabicl, build_tabpfn
 from metrics import classification_accuracy, link_prediction_metrics
 
 
-def main():
+def main() -> None:
+    """Parse CLI args, train the requested model, and print metrics."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="tabicl",
         choices=["tabicl", "tabpfn"])

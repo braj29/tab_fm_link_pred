@@ -3,6 +3,8 @@
 
 This repo hosts a tiny benchmark that compares two tabular foundation models—[TabICL](https://github.com/yandex-research/tabicl) and [TabPFN](https://github.com/automl/TabPFN)—on the FB15k-237 knowledge graph link-prediction task. We turn the triples (head, relation, tail) into a tabular classification problem where the model must predict the tail entity given the head and relation. Experiments default to the full FB15k-237 splits, but you can cap them for quick local smoke tests.
 
+Both models operate directly on pandas DataFrames: we keep the raw string identifiers in `head`, `relation`, and `tail` columns and rely on each model's built-in preprocessing to detect categorical features. TabICL automatically ordinal-encodes string/object dtypes and assigns a dedicated category for missing values, while TabPFN accepts the same schema via pandas' internal encoding.
+
 ## Environment
 
 - Python ≥ 3.11
@@ -34,15 +36,15 @@ PYTHONPATH=src python src/run.py --model tabicl --max-train 2000 --max-valid 500
 
 Key arguments:
 
-- `--model {tabicl, tabpfn}` (default: `tabicl`)
-- `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`)
-- `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data)
+- `--model {tabicl, tabpfn}` (default: `tabicl`).
+- `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
+- `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
 
-The script performs the following steps:
+Under the hood `src/run.py` orchestrates the following pipeline:
 
-1. Loads FB15k-237 via `src/data.py` (subsampling only if you pass `--max-*` flags).
-2. Builds the requested classifier (`TabICLClassifier` or `TabPFNClassifier`) from `src/model.py`.
-3. Trains on the tabular data and prints validation accuracy plus test accuracy and link-prediction metrics (MRR, Hits@k) computed in `src/metrics.py`.
+1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. The function returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head` and `relation` columns (dtype `object`) and `y_*` is the tail identifier.
+2. `src/model.py` instantiates either `TabICLClassifier` (with hierarchical classification enabled so it can exceed the base 10-class limit) or `TabPFNClassifier` with the requested compute device.
+3. `src/metrics.py` computes both vanilla classification accuracy and link-prediction metrics (MRR plus Hits@k). Since the labels stay as strings, the helper aligns ground-truth labels with the classifier's internal `classes_` ordering before computing ranks.
 
 Example output snippet:
 
@@ -61,12 +63,17 @@ Test Accuracy: 0.4120
 
 ```
 src/
-  data.py      # dataset loading, categorical conversion, subsampling utilities
+  data.py      # dataset loading, parsing, and subsampling utilities
   model.py     # builders for TabICL and TabPFN classifiers
   metrics.py   # accuracy + link prediction metrics (MRR, Hits@k)
   run.py       # CLI experiment runner
 requirements.txt
 pyproject.toml
 ```
+
+### Notes on label cardinality
+
+- **TabICL** natively supports up to 10 classes. We keep `use_hierarchical=True` so it automatically trains a tree of experts whenever the tail cardinality exceeds that limit (the FB15k-237 train set has 175 unique tails).
+- **TabPFN** supports up to 100 classes per model. If you want to run TabPFN on the full dataset you must either (a) limit the label space yourself (e.g., subsample or map rare tails to `Other`) or (b) integrate the [`tabpfn-extensions` many-class wrapper](https://github.com/PriorLabs/tabpfn-extensions/blob/main/src/tabpfn_extensions/many_class/many_class_classifier.py).
 
 Feel free to adapt the subsampling sizes via CLI, add more models, or integrate richer evaluation/reporting as you iterate on the experiments.
