@@ -7,6 +7,8 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
-.vscode
-.tmp_kubejobs
+.venv/
+
+# Editor + local helper artifacts
+.vscode/
+.tmp_kubejobs/
