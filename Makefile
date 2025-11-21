@@ -21,7 +21,7 @@ uv-sync:
 	$(UV) sync
 
 tabicl:
-	PYTHONPATH=src $(UV) run main.py --model tabicl --max-train 2000 --max-valid 500 --max-test 500
+	PYTHONPATH=src $(UV) run main.py --model tabicl --max-train 20 --max-valid 5 --max-test 5
 
 tabpfn:
 	PYTHONPATH=src $(UV) run main.py --model tabpfn --device cuda --max-train 2000 --max-valid 500 --max-test 500
