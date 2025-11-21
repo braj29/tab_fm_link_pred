@@ -18,6 +18,23 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### uv workflow (recommended)
+
+[`uv`](https://github.com/astral-sh/uv) is already configured via `pyproject.toml` and `uv.lock`:
+
+```bash
+uv sync        # create .venv and install dependencies
+uv run main.py --model tabicl --max-train 2000 --max-valid 500 --max-test 500
+```
+
+To refresh locks after editing dependencies, run `uv lock`.
+
+### Formatting and linting (ruff)
+
+- Install dev extras: `uv sync --extra dev`
+- Format: `uv run ruff format`
+- Lint: `uv run ruff check`
+
 The FB15k-237 dataset downloads automatically the first time you run an experiment via `datasets.load_dataset("KGraph/FB15k-237")`. Make sure you are logged into Hugging Face if your environment requires it.
 
 ## Running an experiment
