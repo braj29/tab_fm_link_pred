@@ -22,16 +22,16 @@ The FB15k-237 dataset downloads automatically the first time you run an experime
 
 ## Running an experiment
 
-Use the `src/run.py` entry point (remember to point `PYTHONPATH` at `src/` if you run from the repo root):
+Use `main.py` (remember to point `PYTHONPATH` at `src/` if you run from the repo root):
 
 ```bash
-PYTHONPATH=src python src/run.py --model tabicl
+PYTHONPATH=src python main.py --model tabicl
 ```
 
 For a faster smoke test you can limit each split, e.g.:
 
 ```bash
-PYTHONPATH=src python src/run.py --model tabicl --max-train 2000 --max-valid 500 --max-test 500
+PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --max-test 500
 ```
 
 Key arguments:
@@ -77,3 +77,36 @@ pyproject.toml
 - **TabPFN** supports up to 100 classes per model. If you want to run TabPFN on the full dataset you must either (a) limit the label space yourself (e.g., subsample or map rare tails to `Other`) or (b) integrate the [`tabpfn-extensions` many-class wrapper](https://github.com/PriorLabs/tabpfn-extensions/blob/main/src/tabpfn_extensions/many_class/many_class_classifier.py).
 
 Feel free to adapt the subsampling sizes via CLI, add more models, or integrate richer evaluation/reporting as you iterate on the experiments.
+
+## Running on Kubernetes (kubejobs)
+
+- Build and push the training image from the repo root (replace the registry/tag with your own):
+
+  ```bash
+  docker build -t <REGISTRY>/tab-fm-link-pred:latest .
+  docker push <REGISTRY>/tab-fm-link-pred:latest
+  ```
+
+- From a machine that has access to your university cluster, install kubejobs and make sure `kubectl` points to the right context:
+
+  ```bash
+  pip install kubejobs
+  kubectl config current-context  # verify cluster/namespace
+  ```
+
+- Submit a job with the helper wrapper (this writes `kube_job.yaml` and applies it):
+
+  ```bash
+  python kube/submit_job.py \
+    --image <REGISTRY>/tab-fm-link-pred:latest \
+    --job-name tabfm-tabicl \
+    --user-email you@university.edu \
+    --queue informatics-user-queue \
+    --namespace <k8s-namespace> \
+    --gpu-product NVIDIA-A100-SXM4-40GB \
+    --gpu-limit 1 \
+    --max-train 2000 --max-valid 500 --max-test 500
+  ```
+
+- Use `--model tabpfn --device cuda` to run TabPFN. Add `--env HF_TOKEN=<token>` if your cluster needs an auth token for Hugging Face downloads. Pass `--pvc-name <your-pvc> --pvc-mount /workspace/data` to reuse a shared PVC for caches or datasets.
+- Include `--dry-run` to only generate the YAML; you can then inspect or submit it yourself via `kubectl apply -f kube_job.yaml`.
