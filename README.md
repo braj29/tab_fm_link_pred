@@ -127,3 +127,20 @@ Feel free to adapt the subsampling sizes via CLI, add more models, or integrate 
 
 - Use `--model tabpfn --device cuda` to run TabPFN. Add `--env HF_TOKEN=<token>` if your cluster needs an auth token for Hugging Face downloads. Pass `--pvc-name <your-pvc> --pvc-mount /workspace/data` to reuse a shared PVC for caches or datasets.
 - Include `--dry-run` to only generate the YAML; you can then inspect or submit it yourself via `kubectl apply -f kube_job.yaml`.
+
+### Batch experiment presets (kubejobs)
+
+- Generate YAMLs for a couple of canned experiments (TabICL small and TabPFN small). This writes to `kube/experiments/` and can optionally submit them:
+
+  ```bash
+  python kube/experiments.py \
+    --image <REGISTRY>/tab-fm-link-pred:latest \
+    --user-email you@university.edu \
+    --namespace <k8s-namespace> \
+    --queue informatics-user-queue \
+    --gpu-product NVIDIA-A100-SXM4-40GB \
+    --gpu-limit 1 \
+    --apply    # drop this flag if you only want YAMLs
+  ```
+
+  By default this emits `tabfm-tabicl-small` and `tabfm-tabpfn-small` jobs. Override the prefix with `--job-prefix` or edit `kube/experiments.py` to add more presets.
