@@ -144,3 +144,46 @@ Feel free to adapt the subsampling sizes via CLI, add more models, or integrate 
   ```
 
   By default this emits `tabfm-tabicl-small` and `tabfm-tabpfn-small` jobs. Override the prefix with `--job-prefix` or edit `kube/experiments.py` to add more presets.
+
+### Step-by-step tutorial (kubejobs)
+
+- Follow along with `kube/tutorial_example.py`, mirroring the kubejobs simple tutorial:
+
+  ```bash
+  pip install kubejobs
+  kubectl config current-context          # confirm cluster/namespace
+  docker build -t <REGISTRY>/tab-fm-link-pred:latest .
+  docker push <REGISTRY>/tab-fm-link-pred:latest
+
+  # Dry-run: print YAML for a small TabICL job
+  python kube/tutorial_example.py \
+    --image <REGISTRY>/tab-fm-link-pred:latest \
+    --user-email you@university.edu \
+    --namespace <k8s-namespace> \
+    --gpu-product NVIDIA-A100-SXM4-40GB \
+    --gpu-limit 1 \
+    --dry-run
+
+  # Apply directly (streams YAML to kubectl apply -f -)
+  python kube/tutorial_example.py \
+    --image <REGISTRY>/tab-fm-link-pred:latest \
+    --user-email you@university.edu \
+    --namespace <k8s-namespace> \
+    --gpu-product NVIDIA-A100-SXM4-40GB \
+    --gpu-limit 1
+
+  kubectl get jobs
+  kubectl logs job/tabfm-tutorial
+  ```
+
+  Switch to TabPFN with `--model tabpfn --device cuda`. Add `--env HF_TOKEN=...` if HF auth is required. Use `--pvc-name`/`--pvc-mount` to attach a shared PVC.
+
+### Zero-CLI preset runner
+
+- If you prefer not to pass flags, edit the CONFIG block in `kube/tutorial_preset.py` (image, user_email, namespace, PVC, etc.), then run:
+
+  ```bash
+  python kube/tutorial_preset.py
+  ```
+
+  It writes `kube/tutorial_preset.yaml` using those baked-in values. Set `apply=True` in the CONFIG block to automatically submit with `kubectl apply -f kube/tutorial_preset.yaml`.

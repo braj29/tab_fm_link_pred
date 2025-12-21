@@ -1,0 +1,17 @@
+apiVersion : v1
+kind : Pod
+metadata :
+name : $USER - hello - world1
+labels :
+eidf / user : $USER
+spec :
+containers :
+- name : ubuntu
+image : ubuntu :20.04
+command : ["/ bin / bash " , " - c " , " echo ’ Hello World ! ’"]
+resources :
+limits :
+nvidia . com / gpu : 0
+cpu : 1
+memory : 4Gi
+restartPolicy : Never
