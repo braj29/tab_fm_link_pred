@@ -7,8 +7,8 @@ metadata:
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
 spec:
   containers:
-    - name: python
-      image: python:3.11-slim
+    - name: ubuntu
+      image: ubuntu:20.04
       command: ["/bin/bash", "-lc", "which conda && conda info --envs || echo 'conda not found'"]
       resources:
         limits:
