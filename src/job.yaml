@@ -1,20 +1,21 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: tabicl-experiment-maxtrain-1000
+  name: pminervini-hello-world1
   labels:
     eidf/user: pminervini
+    kueue.x-k8s.io/queue-name: eidf097ns-user-queue
 spec:
   containers:
     - name: ubuntu
       image: ubuntu:20.04
       command:
         - /bin/bash
-        - -c
+        - -lc
         - python src/experiment.py --model tabicl --max-train 1000
       resources:
         limits:
           nvidia.com/gpu: 0
-          cpu: 1
+          cpu: "1"
           memory: 4Gi
   restartPolicy: Never
