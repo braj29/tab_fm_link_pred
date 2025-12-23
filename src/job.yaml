@@ -5,9 +5,13 @@ metadata:
   namespace: eidf097ns
   labels:
     eidf/user: pminervini
+    kueue.x-k8s.io/queue-name: eidf097ns-user-queue
 spec:
   backoffLimit: 0
   template:
+    metadata:
+      labels:
+        kueue.x-k8s.io/queue-name: eidf097ns-user-queue
     spec:
       restartPolicy: Never
       containers:
