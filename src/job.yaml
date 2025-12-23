@@ -15,9 +15,14 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-        - name: ubuntu
-          image: ubuntu:20.04
-          command: ["bash", "-lc", "echo 'Hello World'"]
+        - name: tab-fm-link-pred
+          image: tab-fm-link-pred:latest
+          command:
+            [
+              "bash",
+              "-lc",
+              "python src/experiment.py --model tabicl --max-train 1000",
+            ]
           resources:
             requests:
               cpu: "1"
