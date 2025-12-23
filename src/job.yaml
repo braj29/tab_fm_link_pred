@@ -1,32 +1,20 @@
-apiVersion: batch/v1
-kind: Job
+apiVersion: v1
+kind: Pod
 metadata:
-  generateName: tabicl-test-1000-
-  namespace: eidf097ns
+  name: $USER-hello-world1
   labels:
-    eidf/user: pminervini
-    kueue.x-k8s.io/queue-name: eidf097ns-user-queue
+    eidf/user: $USER
 spec:
-  backoffLimit: 0
-  template:
-    metadata:
-      labels:
-        kueue.x-k8s.io/queue-name: eidf097ns-user-queue
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: tab-fm-link-pred
-          image: tab-fm-link-pred:latest
-          command:
-            [
-              "bash",
-              "-lc",
-              "python src/experiment.py --model tabicl --max-train 1000",
-            ]
-          resources:
-            requests:
-              cpu: "1"
-              memory: "4Gi"
-            limits:
-              cpu: "1"
-              memory: "4Gi"
+  containers:
+    - name: ubuntu
+      image: ubuntu:20.04
+      command:
+        - /bin/bash
+        - -c
+        - python src/experiment.py --model tabicl --max-train 1000
+      resources:
+        limits:
+          nvidia.com/gpu: 0
+          cpu: 1
+          memory: 4Gi
+  restartPolicy: Never
