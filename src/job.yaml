@@ -1,18 +1,25 @@
-apiVersion: v1
-kind: Pod
+apiVersion: batch/v1
+kind: Job
 metadata:
-  generateName: pminervini-hello-world1
+  generateName: pminervini-job-
   labels:
     eidf/user: pminervini
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
 spec:
-  containers:
-    - name: ubuntu
-      image: ubuntu:20.04
-      command: ["/bin/bash", "-lc", "which conda && conda info --envs || echo 'conda not found'"]
-      resources:
-        limits:
-          nvidia.com/gpu: 0
-          cpu: "1"
-          memory: 4Gi
-  restartPolicy: Never
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        eidf/user: pminervini
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ubuntu
+          image: ubuntu:20.04
+          command: ["/bin/bash", "-lc", "which conda && conda info --envs || echo 'conda not found'"]
+          resources:
+            limits:
+              nvidia.com/gpu: 0
+              cpu: "1"
+              memory: 4Gi
