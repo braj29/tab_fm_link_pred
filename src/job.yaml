@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: hello-world
+  generateName: hello-world
   namespace: eidf097ns
   labels:
     eidf/user: pminervini
