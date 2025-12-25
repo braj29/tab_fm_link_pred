@@ -9,7 +9,7 @@ spec:
   containers:
     - name: ubuntu
       image: ubuntu:20.04
-      command: ["/bin/bash", "-lc", "apt-get update && apt-get install -y git python3 python3-pip && git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred && pip3 install -r /workspace/tab_fm_link_pred/requirements.txt && python3 /workspace/tab_fm_link_pred/src/experiment.py --model tabicl --max-train 1000"]
+      command: ["/bin/bash", "-lc", "apt-get update && apt-get install -y git curl python3 && curl -LsSf https://astral.sh/uv/install.sh | sh && git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred && cd /workspace/tab_fm_link_pred && /root/.local/bin/uv sync --frozen && /root/.local/bin/uv run python src/experiment.py --model tabicl --max-train 1000"]
       resources:
         limits:
           nvidia.com/gpu: 0
