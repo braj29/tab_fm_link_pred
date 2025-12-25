@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: raj-tabicl-1000
-          image: ubuntu:20.04
+          image: ubuntu:22.04
           command:
             - /bin/bash
             - -lc
