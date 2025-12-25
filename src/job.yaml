@@ -1,39 +1,37 @@
-# apiVersion: v1
-# kind: Pod
-# metadata:
-#   generateName: pminervini-tabicl-1000-
-#   labels:
-#     eidf/user: pminervini
-#     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
-# spec:
-#   containers:
-#     - name: ubuntu
-#       image: ubuntu:20.04
-#       command: ["/bin/bash", "-lc", "apt-get update && apt-get install -y git curl python3 && curl -LsSf https://astral.sh/uv/install.sh | sh && git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred && cd /workspace/tab_fm_link_pred && /root/.local/bin/uv sync --frozen && /root/.local/bin/uv run python src/experiment.py --model tabicl --max-train 1000"]
-#       resources:
-#         limits:
-#           nvidia.com/gpu: 0
-#           cpu: "0.25"
-#           memory: 1Gi
-#         requests:
-#           cpu: "0.25"
-#           memory: 1Gi
-#   restartPolicy: Never
-
-apiVersion: v1
-kind: Pod
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: pminervini-tabicl-1000
-  labels:
+  annotations: &id001
     eidf/user: pminervini
+    groups: eidf097 eidf097-host1-login eidf-gateway-login
+    home: /home/eidf097/eidf097/pminervini
+    login_user: pminervini
+    shell: /bin/bash
+  labels: &id002
+    eidf/user: pminervini
+    kueue.x-k8s.io/queue-name: eidf097ns-user-queue
+  generateName: pminervini-tabicl-1000-
+  namespace: eidf097ns
 spec:
-  containers:
-  - name: ubuntu
-    image: ubuntu:20.04
-    command: ["/bin/bash", "-lc", "apt-get update && apt-get install -y git curl python3 && curl -LsSf https://astral.sh/uv/install.sh | sh && git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred && cd /workspace/tab_fm_link_pred && /root/.local/bin/uv sync --frozen && /root/.local/bin/uv run python src/experiment.py --model tabicl --max-train 1000"]
-    resources:
-      limits:
-        nvidia.com/gpu: 0
-        cpu: 1
-        memory: 4Gi
-  restartPolicy: Never
+  backoffLimit: 4
+  template:
+    metadata:
+      annotations: *id001
+      labels: *id002
+    spec:
+      containers:
+        - name: pminervini-tabicl-1000
+          image: ubuntu:20.04
+          command:
+            - /bin/bash
+            - -lc
+            - apt-get update && apt-get install -y git curl python3 && curl -LsSf https://astral.sh/uv/install.sh | sh && git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred && cd /workspace/tab_fm_link_pred && /root/.local/bin/uv sync --frozen && /root/.local/bin/uv run python src/experiment.py --model tabicl --max-train 1000
+          resources:
+            limits:
+              cpu: 1
+              memory: 4Gi
+              nvidia.com/gpu: 0
+            requests:
+              cpu: 1
+              memory: 4Gi
+      restartPolicy: Never
