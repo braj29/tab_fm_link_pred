@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  generateName: ${USER}-tabicl-1000-
+  generateName: pminervini-tabicl-1000-
   labels:
-    eidf/user: ${USER}
+    eidf/user: pminervini
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
 spec:
   containers:
