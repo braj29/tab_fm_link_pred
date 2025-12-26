@@ -47,7 +47,7 @@ spec:
             limits:
               cpu: 1
               memory: 4Gi
-              nvidia.com/gpu: 0
+              nvidia.com/gpu: 1
             requests:
               cpu: 1
               memory: 4Gi
