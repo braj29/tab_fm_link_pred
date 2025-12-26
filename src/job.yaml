@@ -42,7 +42,7 @@ spec:
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tabicl --max-train 1000 --output /workspace/tab_fm_link_pred/experiment_metrics.json
+              /root/.local/bin/uv run python -u main.py --model tabicl --max-train 1000 --max-valid 1000 --max-test 1000 --output /workspace/tab_fm_link_pred/experiment_metrics.json
           resources:
             limits:
               cpu: 1
