@@ -1,0 +1,13 @@
+{
+  "model": "tabicl",
+  "device": "auto",
+  "max_train": 1000,
+  "max_valid": 500,
+  "max_test": 500,
+  "overfit_small": false,
+  "val_accuracy": 0.5571428571428572,
+  "val_log_loss": 0.6517280290182164,
+  "test_accuracy": 0.6875,
+  "test_log_loss": 0.6380060853993847,
+  "elapsed_seconds": 32.99
+}
