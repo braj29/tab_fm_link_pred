@@ -117,22 +117,12 @@ def subsample(df: pd.DataFrame, max_n: Optional[int] = None, seed: int = 42) -> 
     return df.sample(n=max_n, random_state=seed).copy()
 
 
-def prepare_data(
+def load_splits(
     max_train: Optional[int] = None,
     max_valid: Optional[int] = None,
     max_test: Optional[int] = None,
- ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
-    """Load, optionally subsample, and split FB15k-237 into features/labels.
-
-    Args:
-        max_train: Optional cap for the train split size.
-        max_valid: Optional cap for the validation split size.
-        max_test: Optional cap for the test split size.
-
-    Returns:
-        Tuple of pandas objects ``(X_train, y_train, X_valid, y_valid, X_test,
-        y_test)`` ready for classifier ``fit``/``predict`` calls.
-    """
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load FB15k-237 splits and optionally subsample each split."""
 
     train, valid, test = load_fb15k237()
 
@@ -140,9 +130,19 @@ def prepare_data(
     valid = subsample(valid, max_valid)
     test = subsample(test, max_test)
 
-    # Keep raw string/object dtypes so TabICL/TabPFN can run their own preprocessing.
+    return train, valid, test
 
-    # Features (head, relation), label (tail)
+
+def prepare_data(
+    max_train: Optional[int] = None,
+    max_valid: Optional[int] = None,
+    max_test: Optional[int] = None,
+) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    """Load, optionally subsample, and split FB15k-237 into features/labels."""
+
+    train, valid, test = load_splits(max_train=max_train, max_valid=max_valid, max_test=max_test)
+
+    # Keep raw string/object dtypes so TabICL/TabPFN can run their own preprocessing.
     X_train, y_train = train[["head", "relation"]], train["tail"]
     X_valid, y_valid = valid[["head", "relation"]], valid["tail"]
     X_test, y_test = test[["head", "relation"]], test["tail"]

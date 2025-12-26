@@ -56,12 +56,16 @@ Key arguments:
 - `--model {tabicl, tabpfn}` (default: `tabicl`).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
+- `--max-samples` to apply a single cap to train/valid/test for quick debugging.
+- `--overfit-small` to train on 200 triples and evaluate on the same set (sanity check).
+- `--eval-head` to also evaluate head prediction (relation + tail -> head).
+- `--no-filtered` to disable filtered ranking metrics (raw ranking only).
 
 Under the hood `src/run.py` orchestrates the following pipeline:
 
 1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. The function returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head` and `relation` columns (dtype `object`) and `y_*` is the tail identifier.
 2. `src/model.py` instantiates either `TabICLClassifier` (with hierarchical classification enabled so it can exceed the base 10-class limit) or `TabPFNClassifier` with the requested compute device.
-3. `src/metrics.py` computes both vanilla classification accuracy and link-prediction metrics (MRR plus Hits@k). Since the labels stay as strings, the helper aligns ground-truth labels with the classifier's internal `classes_` ordering before computing ranks.
+3. `src/metrics.py` computes both vanilla classification accuracy/log loss and filtered link-prediction metrics (MRR plus Hits@k). The filtered setting removes other known true triples for each query before ranking the target entity; labels not present in the training classes are skipped for ranking metrics.
 
 Example output snippet:
 
@@ -75,6 +79,10 @@ Val Accuracy: 0.4270
 Test Accuracy: 0.4120
 {'MRR': 0.512, 'Hits@1': 0.32, 'Hits@3': 0.58, 'Hits@10': 0.74}
 ```
+
+Results are written to `experiment_metrics.json` by default; override with `--output /path/to/file.json` to save elsewhere.
+
+Note: The current benchmark treats link prediction as multiclass classification over tail (and optionally head) entities. There is no explicit negative sampling or embedding training loop; ranking metrics are computed over the classifier's known classes (i.e., tails seen in training).
 
 ## Project structure
 
