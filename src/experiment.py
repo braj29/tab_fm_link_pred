@@ -12,6 +12,19 @@ from data import prepare_data
 from model import build_tabicl, build_tabpfn
 from metrics import classification_accuracy, link_prediction_metrics
 
+def _filter_known_labels(
+    X: "pd.DataFrame",
+    y: "pd.Series",
+    classes: list[str] | "np.ndarray",
+    split_name: str,
+) -> tuple["pd.DataFrame", "pd.Series", int]:
+    known = set(classes)
+    mask = y.isin(known)
+    dropped = int((~mask).sum())
+    if dropped:
+        print(f"=== Dropping {dropped} {split_name} rows with unseen labels ===")
+    return X.loc[mask].copy(), y.loc[mask].copy(), dropped
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -82,12 +95,22 @@ def run_experiment(args: argparse.Namespace) -> None:
         clf.fit(X_train, y_train)
 
         print("=== Validation accuracy ===")
-        val_acc = classification_accuracy(clf, X_valid, y_valid)
+        X_valid_f, y_valid_f, dropped_valid = _filter_known_labels(
+            X_valid, y_valid, clf.classes_, "validation"
+        )
+        if len(y_valid_f) == 0:
+            raise ValueError("No validation labels match training classes.")
+        val_acc = classification_accuracy(clf, X_valid_f, y_valid_f)
         print(f"Val Accuracy: {val_acc:.4f}")
 
         print("=== Test metrics ===")
-        test_acc = classification_accuracy(clf, X_test, y_test)
-        lp = link_prediction_metrics(clf, X_test, y_test)
+        X_test_f, y_test_f, dropped_test = _filter_known_labels(
+            X_test, y_test, clf.classes_, "test"
+        )
+        if len(y_test_f) == 0:
+            raise ValueError("No test labels match training classes.")
+        test_acc = classification_accuracy(clf, X_test_f, y_test_f)
+        lp = link_prediction_metrics(clf, X_test_f, y_test_f)
 
         print(f"Test Accuracy: {test_acc:.4f}")
         print(lp)
@@ -101,6 +124,8 @@ def run_experiment(args: argparse.Namespace) -> None:
             "val_accuracy": val_acc,
             "test_accuracy": test_acc,
             "link_prediction": lp,
+            "dropped_valid_unseen": dropped_valid,
+            "dropped_test_unseen": dropped_test,
             "elapsed_seconds": round(time.time() - start, 2),
         }
         output_path = Path(args.output)
