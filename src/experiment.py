@@ -8,9 +8,11 @@ import time
 import traceback
 from pathlib import Path
 
+import pandas as pd
+
 from data import prepare_data
 from model import build_tabicl, build_tabpfn
-from metrics import classification_accuracy, classification_log_loss
+from metrics import filtered_ranking_metrics_binary
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -63,6 +65,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Keep validation/test triples with unseen entities.",
     )
     parser.add_argument(
+        "--hard-negatives",
+        action="store_true",
+        help="Sample relation-consistent negatives (harder).",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -96,6 +103,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             max_test=max_test,
             n_neg_per_pos=args.n_neg_per_pos,
             filter_unseen=not args.no_filter_unseen,
+            hard_negatives=args.hard_negatives,
         )
         if args.overfit_small:
             X_valid, y_valid = X_train.copy(), y_train.copy()
@@ -117,17 +125,31 @@ def run_experiment(args: argparse.Namespace) -> None:
         print("=== Task definition ===")
         print("Binary link prediction (head, relation, tail -> true/false). Classes: 2")
 
-        print("=== Validation metrics ===")
-        val_acc = classification_accuracy(clf, X_valid, y_valid)
-        val_loss = classification_log_loss(clf, X_valid, y_valid)
-        print(f"Val Accuracy (binary): {val_acc:.4f}")
-        print(f"Val LogLoss (binary): {val_loss:.4f}")
+        train_pos = X_train[y_train == 1].copy()
+        valid_pos = X_valid[y_valid == 1].copy()
+        test_pos = X_test[y_test == 1].copy()
+        all_pos = pd.concat([train_pos, valid_pos, test_pos], ignore_index=True)
 
-        print("=== Test metrics ===")
-        test_acc = classification_accuracy(clf, X_test, y_test)
-        test_loss = classification_log_loss(clf, X_test, y_test)
-        print(f"Test Accuracy (binary): {test_acc:.4f}")
-        print(f"Test LogLoss (binary): {test_loss:.4f}")
+        candidate_entities = sorted(set(train_pos["head"]).union(train_pos["tail"]))
+        print(f"=== Candidate entities (train): {len(candidate_entities)} ===")
+
+        print("=== Validation ranking metrics ===")
+        val_lp = filtered_ranking_metrics_binary(
+            clf,
+            valid_pos,
+            candidate_entities,
+            all_pos,
+        )
+        print(val_lp)
+
+        print("=== Test ranking metrics ===")
+        test_lp = filtered_ranking_metrics_binary(
+            clf,
+            test_pos,
+            candidate_entities,
+            all_pos,
+        )
+        print(test_lp)
 
         metrics = {
             "model": args.model,
@@ -136,10 +158,8 @@ def run_experiment(args: argparse.Namespace) -> None:
             "max_valid": max_valid,
             "max_test": max_test,
             "overfit_small": args.overfit_small,
-            "val_accuracy": val_acc,
-            "val_log_loss": val_loss,
-            "test_accuracy": test_acc,
-            "test_log_loss": test_loss,
+            "val_link_prediction": val_lp,
+            "test_link_prediction": test_lp,
             "elapsed_seconds": round(time.time() - start, 2),
         }
         output_path = Path(args.output)

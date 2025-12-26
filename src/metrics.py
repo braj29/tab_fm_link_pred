@@ -1,7 +1,7 @@
 # metrics.py
 """Evaluation helpers for classification and link prediction."""
 
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Sequence, Dict, Tuple, Set
 
 import numpy as np
 import pandas as pd
@@ -29,6 +29,81 @@ def classification_log_loss(
 
     proba = clf.predict_proba(X)
     return float(log_loss(y, proba, labels=clf.classes_))
+
+
+def _build_filter_map(
+    triples: pd.DataFrame,
+) -> Dict[Tuple[str, str], Set[str]]:
+    mapping: Dict[Tuple[str, str], Set[str]] = {}
+    keys = triples.loc[:, ["head", "relation"]].itertuples(index=False, name=None)
+    for key, tail in zip(keys, triples["tail"], strict=False):
+        mapping.setdefault(key, set()).add(tail)
+    return mapping
+
+
+def filtered_ranking_metrics_binary(
+    clf: ClassifierMixin,
+    triples: pd.DataFrame,
+    candidate_entities: Sequence[str],
+    positives: pd.DataFrame,
+    hits_ks: Sequence[int] = (1, 3, 10),
+) -> Mapping[str, float]:
+    """Compute filtered MRR/MR/Hits@k for binary link prediction.
+
+    Args:
+        clf: Fitted classifier exposing ``predict_proba`` and ``classes_``.
+        triples: Positive triples to evaluate (columns: head, relation, tail).
+        candidate_entities: Entity list to rank as candidate tails.
+        positives: All known positive triples (train/valid/test) for filtering.
+        hits_ks: The ``k`` cutoffs for Hits@k.
+    """
+
+    if 1 not in clf.classes_:
+        raise ValueError("Classifier does not expose label 1 for positive class.")
+    pos_index = int(list(clf.classes_).index(1))
+    filter_map = _build_filter_map(positives)
+    entity_to_idx = {ent: idx for idx, ent in enumerate(candidate_entities)}
+
+    ranks = []
+    hits = {k: 0 for k in hits_ks}
+
+    for head, relation, tail in triples.itertuples(index=False, name=None):
+        candidates = pd.DataFrame({
+            "head": [head] * len(candidate_entities),
+            "relation": [relation] * len(candidate_entities),
+            "tail": list(candidate_entities),
+        })
+        scores = clf.predict_proba(candidates)[:, pos_index]
+
+        for other_tail in filter_map.get((head, relation), set()):
+            if other_tail == tail:
+                continue
+            idx = entity_to_idx.get(other_tail)
+            if idx is None:
+                continue
+            scores[idx] = -np.inf
+
+        gold_idx = entity_to_idx.get(tail)
+        if gold_idx is None:
+            continue
+        sorted_idx = np.argsort(-scores)
+        rank = int(np.where(sorted_idx == gold_idx)[0][0]) + 1
+        ranks.append(rank)
+        for k in hits_ks:
+            if rank <= k:
+                hits[k] += 1
+
+    if not ranks:
+        raise ValueError("No valid ranks computed (check candidate entities list).")
+
+    ranks_arr = np.array(ranks, dtype=float)
+    metrics = {
+        "MRR": float(np.mean(1.0 / ranks_arr)),
+        "MR": float(np.mean(ranks_arr)),
+    }
+    for k in hits_ks:
+        metrics[f"Hits@{k}"] = hits[k] / len(ranks_arr)
+    return metrics
 
 
 def link_prediction_metrics(

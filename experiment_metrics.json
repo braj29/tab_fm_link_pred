@@ -5,9 +5,19 @@
   "max_valid": 500,
   "max_test": 500,
   "overfit_small": false,
-  "val_accuracy": 0.5571428571428572,
-  "val_log_loss": 0.6517280290182164,
-  "test_accuracy": 0.6875,
-  "test_log_loss": 0.6380060853993847,
-  "elapsed_seconds": 32.99
+  "val_link_prediction": {
+    "MRR": 0.03878511391129201,
+    "MR": 575.6,
+    "Hits@1": 0.0,
+    "Hits@3": 0.08571428571428572,
+    "Hits@10": 0.11428571428571428
+  },
+  "test_link_prediction": {
+    "MRR": 0.11288402379202106,
+    "MR": 396.75,
+    "Hits@1": 0.0625,
+    "Hits@3": 0.15625,
+    "Hits@10": 0.15625
+  },
+  "elapsed_seconds": 841.6
 }

@@ -60,12 +60,13 @@ Key arguments:
 - `--overfit-small` to train on 200 triples and evaluate on the same set (sanity check).
 - `--n-neg-per-pos` to control the number of negatives per positive triple (default: 1).
 - `--no-filter-unseen` to keep validation/test triples with unseen entities.
+- `--hard-negatives` to sample relation-consistent negatives (harder).
 
 Under the hood `src/run.py` orchestrates the following pipeline:
 
 1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. It then adds negative samples and returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head`, `relation`, and `tail` columns (dtype `object`) and `y_*` is a binary label (`1` = true triple, `0` = corrupted).
 2. `src/model.py` instantiates either `TabICLClassifier` (with hierarchical classification enabled so it can exceed the base 10-class limit) or `TabPFNClassifier` with the requested compute device.
-3. `src/metrics.py` computes binary classification accuracy and log loss.
+3. `src/metrics.py` computes filtered ranking metrics (MRR, MR, Hits@k) by scoring candidate tails with the binary classifier.
 
 Example output snippet:
 
@@ -73,17 +74,15 @@ Example output snippet:
 === Loading data (small experiment) ===
 === Building TabICL ===
 === Fitting ===
-=== Validation metrics ===
-Val Accuracy (binary): 0.7420
-Val LogLoss (binary): 0.5210
-=== Test metrics ===
-Test Accuracy (binary): 0.7310
-Test LogLoss (binary): 0.5370
+=== Validation ranking metrics ===
+{'MRR': 0.412, 'MR': 78.2, 'Hits@1': 0.28, 'Hits@3': 0.45, 'Hits@10': 0.63}
+=== Test ranking metrics ===
+{'MRR': 0.401, 'MR': 81.5, 'Hits@1': 0.27, 'Hits@3': 0.44, 'Hits@10': 0.61}
 ```
 
 Results are written to `experiment_metrics.json` by default; override with `--output /path/to/file.json` to save elsewhere.
 
-Note: The current benchmark treats link prediction as binary classification over (head, relation, tail) with negative sampling. There is no explicit KGE loss or embedding training loop; metrics are standard binary classification scores.
+Note: The current benchmark treats link prediction as binary classification over (head, relation, tail) with negative sampling. Ranking metrics are computed by scoring candidate tails with the binary classifier and applying filtered evaluation.
 
 ## Project structure
 

@@ -1,7 +1,7 @@
 # data.py
 """Utilities for loading and preparing the FB15k-237 triples."""
 
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Set, Tuple, Dict
 
 import random
 
@@ -138,31 +138,49 @@ def _log_dataset_stats(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFr
 def _negative_sample_split(
     df: pd.DataFrame,
     entity_pool: Sequence[str],
-    positives: set[tuple[str, str, str]],
+    positives: Set[Tuple[str, str, str]],
     n_neg_per_pos: int,
     seed: int,
+    split_name: str,
+    relation_tail_pool: Optional[Dict[str, Sequence[str]]] = None,
+    hard_negatives: bool = False,
     max_tries: int = 50,
 ) -> pd.DataFrame:
     rng = random.Random(seed)
-    negatives: list[tuple[str, str, str]] = []
+    negatives: List[Tuple[str, str, str]] = []
+    neg_set: Set[Tuple[str, str, str]] = set()
     skipped = 0
+    warned = False
 
     for head, relation, tail in df.itertuples(index=False, name=None):
         for _ in range(n_neg_per_pos):
             found = False
             for _ in range(max_tries):
-                corrupt_tail = rng.choice(entity_pool)
+                if hard_negatives and relation_tail_pool:
+                    candidates = relation_tail_pool.get(relation)
+                else:
+                    candidates = None
+                if candidates:
+                    corrupt_tail = rng.choice(candidates)
+                else:
+                    corrupt_tail = rng.choice(entity_pool)
                 if corrupt_tail == tail:
                     continue
                 candidate = (head, relation, corrupt_tail)
-                if candidate not in positives:
+                if candidate not in positives and candidate not in neg_set:
                     negatives.append(candidate)
+                    neg_set.add(candidate)
                     found = True
                     break
             if not found:
                 skipped += 1
+                if not warned:
+                    print(
+                        f"=== Warning: {split_name} skipped negatives after {max_tries} tries ==="
+                    )
+                    warned = True
     if skipped:
-        print(f"=== Warning: skipped {skipped} negatives after {max_tries} tries ===")
+        print(f"=== {split_name} negatives skipped: {skipped} ===")
 
     neg_df = pd.DataFrame(negatives, columns=["head", "relation", "tail"])
     neg_df["label"] = 0
@@ -191,6 +209,7 @@ def prepare_data(
     max_test: Optional[int] = None,
     n_neg_per_pos: int = 1,
     filter_unseen: bool = True,
+    hard_negatives: bool = False,
     seed: int = 42,
 ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Load, optionally subsample, and split FB15k-237 into binary features/labels."""
@@ -210,9 +229,15 @@ def prepare_data(
         if len(test) != before_test:
             print(f"=== Filtered {before_test - len(test)} test triples with unseen entities ===")
 
-    positives = set(train.itertuples(index=False, name=None))
-    positives.update(valid.itertuples(index=False, name=None))
-    positives.update(test.itertuples(index=False, name=None))
+    positives_train: Set[Tuple[str, str, str]] = set(train.itertuples(index=False, name=None))
+    positives_all: Set[Tuple[str, str, str]] = set(positives_train)
+    positives_all.update(valid.itertuples(index=False, name=None))
+    positives_all.update(test.itertuples(index=False, name=None))
+
+    relation_tail_pool: Dict[str, Sequence[str]] = {}
+    if hard_negatives:
+        grouped = train.groupby("relation")["tail"].unique()
+        relation_tail_pool = {rel: list(tails) for rel, tails in grouped.items()}
 
     train_pos = train.copy()
     train_pos["label"] = 1
@@ -224,28 +249,50 @@ def prepare_data(
     train_neg = _negative_sample_split(
         train,
         train_entities,
-        positives,
+        positives_all,
         n_neg_per_pos=n_neg_per_pos,
         seed=seed,
+        split_name="train",
+        relation_tail_pool=relation_tail_pool,
+        hard_negatives=hard_negatives,
     )
     valid_neg = _negative_sample_split(
         valid,
         train_entities,
-        positives,
+        positives_train,
         n_neg_per_pos=n_neg_per_pos,
         seed=seed + 1,
+        split_name="valid",
+        relation_tail_pool=relation_tail_pool,
+        hard_negatives=hard_negatives,
     )
     test_neg = _negative_sample_split(
         test,
         train_entities,
-        positives,
+        positives_train,
         n_neg_per_pos=n_neg_per_pos,
         seed=seed + 2,
+        split_name="test",
+        relation_tail_pool=relation_tail_pool,
+        hard_negatives=hard_negatives,
     )
 
     train_labeled = pd.concat([train_pos, train_neg], ignore_index=True)
     valid_labeled = pd.concat([valid_pos, valid_neg], ignore_index=True)
     test_labeled = pd.concat([test_pos, test_neg], ignore_index=True)
+
+    print(
+        f"=== Train labels: pos={len(train_pos)}, neg={len(train_neg)}, "
+        f"pos_ratio={len(train_pos) / max(len(train_labeled), 1):.3f} ==="
+    )
+    print(
+        f"=== Valid labels: pos={len(valid_pos)}, neg={len(valid_neg)}, "
+        f"pos_ratio={len(valid_pos) / max(len(valid_labeled), 1):.3f} ==="
+    )
+    print(
+        f"=== Test labels: pos={len(test_pos)}, neg={len(test_neg)}, "
+        f"pos_ratio={len(test_pos) / max(len(test_labeled), 1):.3f} ==="
+    )
 
     train_labeled = train_labeled.sample(frac=1.0, random_state=seed).reset_index(drop=True)
     valid_labeled = valid_labeled.sample(frac=1.0, random_state=seed).reset_index(drop=True)
@@ -255,5 +302,12 @@ def prepare_data(
     X_train, y_train = train_labeled[["head", "relation", "tail"]], train_labeled["label"]
     X_valid, y_valid = valid_labeled[["head", "relation", "tail"]], valid_labeled["label"]
     X_test, y_test = test_labeled[["head", "relation", "tail"]], test_labeled["label"]
+
+    if set(y_train.unique()) != {0, 1}:
+        raise ValueError("Train labels must contain both 0 and 1.")
+    if set(y_valid.unique()) != {0, 1}:
+        raise ValueError("Valid labels must contain both 0 and 1.")
+    if set(y_test.unique()) != {0, 1}:
+        raise ValueError("Test labels must contain both 0 and 1.")
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test
