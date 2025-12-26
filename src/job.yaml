@@ -22,6 +22,9 @@ spec:
       containers:
         - name: raj-tabicl-1000
           image: ubuntu:22.04
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
           command:
             - /bin/bash
             - -lc
@@ -39,7 +42,7 @@ spec:
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python src/experiment.py --model tabicl --max-train 1000
+              /root/.local/bin/uv run python -u src/experiment.py --model tabicl --max-train 1000 --output /workspace/tab_fm_link_pred/experiment_metrics.json
           resources:
             limits:
               cpu: 1
