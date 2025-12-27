@@ -25,6 +25,13 @@ spec:
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: HF_HOME
+              value: /workspace/.cache/huggingface
           command:
             - /bin/bash
             - -lc
@@ -41,8 +48,9 @@ spec:
               echo "Step 5: uv sync"
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
+              /root/.local/bin/uv pip install huggingface_hub
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tabicl --max-train 5000 --max-valid 1000 --max-test 1000 --output /workspace/tab_fm_link_pred/experiment_metrics.json
+              /root/.local/bin/uv run python -u main.py --model tabpfn --max-train 1000 --max-valid 500 --max-test 500 --output /workspace/tab_fm_link_pred/experiment_metrics.json
           resources:
             limits:
               cpu: 1
