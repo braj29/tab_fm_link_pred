@@ -50,7 +50,7 @@ spec:
               /root/.local/bin/uv sync --frozen
               /root/.local/bin/uv pip install huggingface_hub
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tabpfn --max-train 5000 --max-valid 1000 --max-test 1000 --output /workspace/tab_fm_link_pred/experiment_metrics.json
+              /root/.local/bin/uv run python -u main.py --model tabpfn --output /workspace/tab_fm_link_pred/experiment_metrics_tabicl_full.json
           resources:
             limits:
               cpu: 1
