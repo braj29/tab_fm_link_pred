@@ -10,7 +10,7 @@ metadata:
   labels: &id002
     eidf/user: pminervini
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
-  generateName: raj-tabpfn-5000-
+  generateName: raj-tabicl-full-
   namespace: eidf097ns
 spec:
   backoffLimit: 4
@@ -20,7 +20,7 @@ spec:
       labels: *id002
     spec:
       containers:
-        - name: raj-tabicl-1000
+        - name: raj-tabfm-env
           image: ubuntu:22.04
           env:
             - name: PYTHONUNBUFFERED
