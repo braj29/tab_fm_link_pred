@@ -54,6 +54,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 Key arguments:
 
 - `--model {tabicl, tabpfn}` (default: `tabicl`).
+- `--model limix` to use the LimiX predictor (requires separate install; see below).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
 - `--max-samples` to apply a single cap to train/valid/test for quick debugging.
@@ -83,6 +84,20 @@ Example output snippet:
 Results are written to `experiment_metrics.json` by default; override with `--output /path/to/file.json` to save elsewhere.
 
 Note: The current benchmark treats link prediction as binary classification over (head, relation, tail) with negative sampling. Ranking metrics are computed by scoring candidate tails with the binary classifier and applying filtered evaluation.
+
+## LimiX integration (optional)
+
+To use `--model limix`, install LimiX from https://github.com/limix-ldm/LimiX and ensure
+`inference.predictor.LimiXPredictor` is importable. The default checkpoint is downloaded from
+`stableai-org/LimiX-16M` via Hugging Face; set `HF_TOKEN` if needed.
+
+Example:
+
+```bash
+uv run python main.py --model limix \
+  --limix-config config/cls_default_noretrieval.json \
+  --max-train 1000 --max-valid 500 --max-test 500
+```
 
 ## Project structure
 

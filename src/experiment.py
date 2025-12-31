@@ -7,12 +7,27 @@ import json
 import time
 import traceback
 from pathlib import Path
+import importlib.util
+import sys
 
 import pandas as pd
 
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 from data import prepare_data
-from model import build_tabicl, build_tabpfn
 from metrics import filtered_ranking_metrics_binary
+
+_model_path = SRC_DIR / "model.py"
+_spec = importlib.util.spec_from_file_location("tab_fm_model", _model_path)
+if _spec is None or _spec.loader is None:
+    raise ImportError(f"Unable to load model definitions from {_model_path}")
+_model_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_model_module)
+build_limix = _model_module.build_limix
+build_tabicl = _model_module.build_tabicl
+build_tabpfn = _model_module.build_tabpfn
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -21,7 +36,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         type=str,
         default="tabicl",
-        choices=["tabicl", "tabpfn"],
+        choices=["tabicl", "tabpfn", "limix"],
     )
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument(
@@ -70,6 +85,42 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Sample relation-consistent negatives (harder).",
     )
     parser.add_argument(
+        "--limix-model-id",
+        type=str,
+        default="stableai-org/LimiX-16M",
+        help="Hugging Face repo id for LimiX weights.",
+    )
+    parser.add_argument(
+        "--limix-model-file",
+        type=str,
+        default="LimiX-16M.ckpt",
+        help="Model filename within the LimiX repo.",
+    )
+    parser.add_argument(
+        "--limix-model-path",
+        type=str,
+        default=None,
+        help="Optional local path to LimiX checkpoint.",
+    )
+    parser.add_argument(
+        "--limix-path",
+        type=str,
+        default=None,
+        help="Path to local LimiX repo (adds to PYTHONPATH).",
+    )
+    parser.add_argument(
+        "--limix-cache-dir",
+        type=str,
+        default="./cache",
+        help="Cache dir for downloaded LimiX weights.",
+    )
+    parser.add_argument(
+        "--limix-config",
+        type=str,
+        default="config/cls_default_noretrieval.json",
+        help="Inference config path for LimiX.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -116,6 +167,17 @@ def run_experiment(args: argparse.Namespace) -> None:
         elif args.model == "tabpfn":
             print("=== Building TabPFN ===")
             clf = build_tabpfn(device=args.device)
+        elif args.model == "limix":
+            print("=== Building LimiX ===")
+            clf = build_limix(
+                device=args.device,
+                model_path=args.limix_model_path,
+                limix_path=args.limix_path,
+                model_id=args.limix_model_id,
+                model_file=args.limix_model_file,
+                cache_dir=args.limix_cache_dir,
+                inference_config=args.limix_config,
+            )
         else:
             raise ValueError(f"Unknown model type: {args.model}")
 
