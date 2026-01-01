@@ -12,3 +12,5 @@ print(job.generate_yaml())
 
 # Run the Job on the Kubernetes cluster
 job.run()
+
+# Monitor the Job's status
