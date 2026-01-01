@@ -32,6 +32,8 @@ spec:
                   key: token
             - name: HF_HOME
               value: /workspace/.cache/huggingface
+            - name: PYTHONPATH
+              value: /workspace/LimiX:/workspace/tab_fm_link_pred/src
           command:
             - /bin/bash
             - -lc

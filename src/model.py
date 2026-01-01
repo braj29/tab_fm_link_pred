@@ -57,16 +57,14 @@ class LimiXBinaryClassifier:
         from huggingface_hub import hf_hub_download
 
         if limix_path:
-            if limix_path not in sys.path:
-                sys.path.insert(0, limix_path)
-            existing_model = sys.modules.get("model")
-            if existing_model is not None:
-                existing_path = getattr(existing_model, "__file__", "")
-                if existing_path.endswith("src/model.py"):
-                    sys.modules.pop("model", None)
-                    for key in list(sys.modules):
-                        if key.startswith("model."):
-                            sys.modules.pop(key, None)
+            limix_path = os.path.abspath(limix_path)
+            sys.path = [p for p in sys.path if p != limix_path]
+            sys.path.insert(0, limix_path)
+            if "model" in sys.modules:
+                sys.modules.pop("model", None)
+            for key in list(sys.modules):
+                if key.startswith("model."):
+                    sys.modules.pop(key, None)
 
         try:
             from inference.predictor import LimiXPredictor
