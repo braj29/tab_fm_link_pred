@@ -10,7 +10,7 @@ metadata:
   labels: &id002
     eidf/user: pminervini
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
-  generateName: raj-tabicl-full-
+  generateName: raj-limix-5000-
   namespace: eidf097ns
 spec:
   backoffLimit: 4
@@ -20,7 +20,7 @@ spec:
       labels: *id002
     spec:
       containers:
-        - name: raj-tabfm-env
+        - name: raj-limix-5000
           image: ubuntu:22.04
           env:
             - name: PYTHONUNBUFFERED
@@ -45,12 +45,14 @@ spec:
               curl -LsSf https://astral.sh/uv/install.sh | sh
               echo "Step 4: clone repo"
               git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred
-              echo "Step 5: uv sync"
+              echo "Step 5: clone LimiX"
+              git clone https://github.com/limix-ldm/LimiX /workspace/LimiX
+              echo "Step 6: uv sync"
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
-              /root/.local/bin/uv pip install huggingface_hub
-              echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tabicl --output /workspace/tab_fm_link_pred/experiment_metrics_tabicl_full.json
+              /root/.local/bin/uv pip install huggingface_hub torch torchvision torchaudio scikit-learn einops matplotlib networkx numpy pandas scipy tqdm typing_extensions xgboost kditransform hyperopt
+              echo "Step 7: run experiment"
+              /root/.local/bin/uv run python -u main.py --model limix --limix-path /workspace/LimiX --limix-config /workspace/LimiX/config/cls_default_noretrieval.json --max-train 5000 --max-valid 1000 --max-test 1000 --output /workspace/tab_fm_link_pred/experiment_metrics_limix_5000.json
           resources:
             limits:
               cpu: 1
