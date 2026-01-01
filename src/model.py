@@ -60,6 +60,8 @@ class LimiXBinaryClassifier:
             limix_path = os.path.abspath(limix_path)
             sys.path = [p for p in sys.path if p != limix_path]
             sys.path.insert(0, limix_path)
+            # Ensure our local src/ does not shadow LimiX's model package.
+            sys.path = [p for p in sys.path if not p.endswith("tab_fm_link_pred/src")]
             if "model" in sys.modules:
                 sys.modules.pop("model", None)
             for key in list(sys.modules):
