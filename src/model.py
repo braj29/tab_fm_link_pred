@@ -140,6 +140,91 @@ class LimiXBinaryClassifier:
         return self._predictor.predict(self._x_train, self._y_train, X_enc)
 
 
+class TabDPTBinaryClassifier:
+    """Lightweight wrapper to use TabDPT as a binary classifier."""
+
+    def __init__(
+        self,
+        device: Optional[str] = None,
+        model_weight_path: Optional[str] = None,
+        tabdpt_path: Optional[str] = None,
+        n_ensembles: int = 8,
+        temperature: float = 0.8,
+        context_size: int = 2048,
+        permute_classes: bool = True,
+        seed: Optional[int] = 42,
+    ) -> None:
+        import numpy as np
+        import pandas as pd
+
+        if tabdpt_path:
+            if tabdpt_path not in sys.path:
+                sys.path.insert(0, tabdpt_path)
+
+        try:
+            from tabdpt import TabDPTClassifier
+        except ImportError as exc:
+            raise ImportError(
+                "TabDPT is not installed. Follow https://github.com/layer6ai-labs/TabDPT-inference."
+            ) from exc
+
+        self._np = np
+        self._pd = pd
+        self._columns: list[str] = []
+        self._categories: dict[str, list[str]] = {}
+        self._clf = TabDPTClassifier(device=device, model_weight_path=model_weight_path)
+        self._n_ensembles = n_ensembles
+        self._temperature = temperature
+        self._context_size = context_size
+        self._permute_classes = permute_classes
+        self._seed = seed
+        self.classes_ = np.array([0, 1])
+
+    def _encode(self, X) -> "np.ndarray":
+        pd = self._pd
+        np = self._np
+        if not self._columns:
+            raise ValueError("TabDPTBinaryClassifier must be fit before calling predict.")
+        cols = []
+        for col in self._columns:
+            categories = self._categories[col]
+            values = X[col].where(X[col].isin(categories), "__UNK__")
+            cat = pd.Categorical(values, categories=categories)
+            cols.append(cat.codes.astype(np.int64))
+        return np.stack(cols, axis=1)
+
+    def fit(self, X, y) -> "TabDPTBinaryClassifier":
+        pd = self._pd
+        self._columns = list(X.columns)
+        self._categories = {
+            col: pd.Categorical(X[col]).categories.tolist() + ["__UNK__"]
+            for col in self._columns
+        }
+        X_enc = self._encode(X)
+        y_arr = self._np.asarray(y, dtype=self._np.int64)
+        self._clf.fit(X_enc, y_arr)
+        self.classes_ = self._np.array(sorted(set(y_arr.tolist())))
+        return self
+
+    def predict_proba(self, X):
+        X_enc = self._encode(X)
+        if self._n_ensembles and self._n_ensembles > 1:
+            return self._clf.ensemble_predict_proba(
+                X_enc,
+                n_ensembles=self._n_ensembles,
+                temperature=self._temperature,
+                context_size=self._context_size,
+                permute_classes=self._permute_classes,
+                seed=self._seed,
+            )
+        return self._clf.predict_proba(
+            X_enc,
+            temperature=self._temperature,
+            context_size=self._context_size,
+            seed=self._seed,
+        )
+
+
 def build_limix(
     device: Literal["auto", "cpu", "cuda"] = "auto",
     model_path: Optional[str] = None,
@@ -159,4 +244,28 @@ def build_limix(
         model_file=model_file,
         cache_dir=cache_dir,
         inference_config=inference_config,
+    )
+
+
+def build_tabdpt(
+    device: Optional[str] = None,
+    model_weight_path: Optional[str] = None,
+    tabdpt_path: Optional[str] = None,
+    n_ensembles: int = 8,
+    temperature: float = 0.8,
+    context_size: int = 2048,
+    permute_classes: bool = True,
+    seed: Optional[int] = 42,
+) -> TabDPTBinaryClassifier:
+    """Build a TabDPT wrapper classifier."""
+
+    return TabDPTBinaryClassifier(
+        device=device,
+        model_weight_path=model_weight_path,
+        tabdpt_path=tabdpt_path,
+        n_ensembles=n_ensembles,
+        temperature=temperature,
+        context_size=context_size,
+        permute_classes=permute_classes,
+        seed=seed,
     )

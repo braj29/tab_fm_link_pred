@@ -53,7 +53,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 
 Key arguments:
 
-- `--model {tabicl, tabpfn}` (default: `tabicl`).
+- `--model {tabicl, tabpfn, limix, tabdpt}` (default: `tabicl`).
 - `--model limix` to use the LimiX predictor (requires separate install; see below).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
@@ -84,6 +84,19 @@ Example output snippet:
 Results are written to `experiment_metrics.json` by default; override with `--output /path/to/file.json` to save elsewhere.
 
 Note: The current benchmark treats link prediction as binary classification over (head, relation, tail) with negative sampling. Ranking metrics are computed by scoring candidate tails with the binary classifier and applying filtered evaluation.
+
+## TabDPT integration (optional)
+
+TabDPT lives at https://github.com/layer6ai-labs/TabDPT-inference. Install it and add to `PYTHONPATH`,
+or pass `--tabdpt-path` to point at the repo.
+
+Example:
+
+```bash
+uv run python main.py --model tabdpt \
+  --tabdpt-path /path/to/TabDPT-inference \
+  --max-train 1000 --max-valid 500 --max-test 500
+```
 
 ## LimiX integration (optional)
 
@@ -150,6 +163,23 @@ Feel free to adapt the subsampling sizes via CLI, add more models, or integrate 
 
 - Use `--model tabpfn --device cuda` to run TabPFN. Add `--env HF_TOKEN=<token>` if your cluster needs an auth token for Hugging Face downloads. Pass `--pvc-name <your-pvc> --pvc-mount /workspace/data` to reuse a shared PVC for caches or datasets.
 - Include `--dry-run` to only generate the YAML; you can then inspect or submit it yourself via `kubectl apply -f kube_job.yaml`.
+
+### Render a job YAML (recommended)
+
+Use the generator to avoid copying multiple YAML files:
+
+```bash
+python kube/render_job.py --model tabicl --max-train 1000 --max-valid 500 --max-test 500
+kubectl apply -f kube/job_rendered.yaml
+```
+
+For other models:
+
+```bash
+python kube/render_job.py --model tabpfn --max-train 1000 --max-valid 500 --max-test 500
+python kube/render_job.py --model limix --max-train 5000 --max-valid 1000 --max-test 1000
+python kube/render_job.py --model tabdpt --max-train 1000 --max-valid 500 --max-test 500
+```
 
 ### Batch experiment presets (kubejobs)
 

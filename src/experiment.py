@@ -28,6 +28,7 @@ _spec.loader.exec_module(_model_module)
 build_limix = _model_module.build_limix
 build_tabicl = _model_module.build_tabicl
 build_tabpfn = _model_module.build_tabpfn
+build_tabdpt = _model_module.build_tabdpt
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -36,7 +37,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         type=str,
         default="tabicl",
-        choices=["tabicl", "tabpfn", "limix"],
+        choices=["tabicl", "tabpfn", "limix", "tabdpt"],
     )
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument(
@@ -121,6 +122,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Inference config path for LimiX.",
     )
     parser.add_argument(
+        "--tabdpt-path",
+        type=str,
+        default=None,
+        help="Path to local TabDPT inference repo (adds to PYTHONPATH).",
+    )
+    parser.add_argument(
+        "--tabdpt-weights",
+        type=str,
+        default=None,
+        help="Optional local path to TabDPT weights.",
+    )
+    parser.add_argument(
+        "--tabdpt-n-ensembles",
+        type=int,
+        default=8,
+        help="Number of TabDPT ensembles for inference.",
+    )
+    parser.add_argument(
+        "--tabdpt-temperature",
+        type=float,
+        default=0.8,
+        help="Softmax temperature for TabDPT.",
+    )
+    parser.add_argument(
+        "--tabdpt-context-size",
+        type=int,
+        default=2048,
+        help="Context size for TabDPT.",
+    )
+    parser.add_argument(
+        "--tabdpt-permute-classes",
+        action="store_true",
+        help="Permute class labels across ensembles for TabDPT.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -177,6 +213,18 @@ def run_experiment(args: argparse.Namespace) -> None:
                 model_file=args.limix_model_file,
                 cache_dir=args.limix_cache_dir,
                 inference_config=args.limix_config,
+            )
+        elif args.model == "tabdpt":
+            print("=== Building TabDPT ===")
+            clf = build_tabdpt(
+                device=None if args.device == "auto" else args.device,
+                model_weight_path=args.tabdpt_weights,
+                tabdpt_path=args.tabdpt_path,
+                n_ensembles=args.tabdpt_n_ensembles,
+                temperature=args.tabdpt_temperature,
+                context_size=args.tabdpt_context_size,
+                permute_classes=args.tabdpt_permute_classes,
+                seed=42,
             )
         else:
             raise ValueError(f"Unknown model type: {args.model}")

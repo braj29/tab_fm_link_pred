@@ -12,6 +12,9 @@ dependencies = [
     "numpy",
     "scikit-learn",
     "huggingface-hub>=0.36.0",
+    "omegaconf>=2.3.0",
+    "safetensors>=0.7.0",
+    "faiss-cpu>=1.13.2",
 ]
 
 [tool.uv]
