@@ -53,9 +53,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 
 Key arguments:
 
-- `--model {tabicl, tabpfn, limix, tabdpt}` (default: `tabicl`).
-- `--model saint` to use SAINT (requires separate install; see below).
-- `--model limix` to use the LimiX predictor (requires separate install; see below).
+- `--model {tabicl, tabpfn, limix, tabdpt, saint}` (default: `tabicl`).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
 - `--max-samples` to apply a single cap to train/valid/test for quick debugging.
@@ -67,7 +65,7 @@ Key arguments:
 Under the hood `src/run.py` orchestrates the following pipeline:
 
 1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. It then adds negative samples and returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head`, `relation`, and `tail` columns (dtype `object`) and `y_*` is a binary label (`1` = true triple, `0` = corrupted).
-2. `src/model.py` instantiates either `TabICLClassifier` (with hierarchical classification enabled so it can exceed the base 10-class limit) or `TabPFNClassifier` with the requested compute device.
+2. `src/model.py` instantiates the requested model (TabICL, TabPFN, LimiX, TabDPT, or SAINT).
 3. `src/metrics.py` computes filtered ranking metrics (MRR, MR, Hits@k) by scoring candidate tails with the binary classifier.
 
 Example output snippet:
