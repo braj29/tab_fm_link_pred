@@ -1,23 +1,37 @@
 {
-  "model": "saint",
+  "model": "kgbert",
   "device": "auto",
   "max_train": 1000,
   "max_valid": 500,
   "max_test": 500,
   "overfit_small": false,
-  "val_link_prediction": {
-    "MRR": 0.06602644605402107,
-    "MR": 525.2,
-    "Hits@1": 0.05714285714285714,
-    "Hits@3": 0.05714285714285714,
-    "Hits@10": 0.05714285714285714
+  "val_link_prediction_tail": {
+    "MRR": 0.003564032905895467,
+    "MR": 760.9714285714285,
+    "Hits@1": 0.0,
+    "Hits@3": 0.0,
+    "Hits@10": 0.0
   },
-  "test_link_prediction": {
-    "MRR": 0.08988115031820257,
-    "MR": 523.03125,
-    "Hits@1": 0.0625,
-    "Hits@3": 0.09375,
-    "Hits@10": 0.15625
+  "val_link_prediction_head": {
+    "MRR": 0.0017362346934001248,
+    "MR": 819.2,
+    "Hits@1": 0.0,
+    "Hits@3": 0.0,
+    "Hits@10": 0.0
   },
-  "elapsed_seconds": 33.28
+  "test_link_prediction_tail": {
+    "MRR": 0.0026971324210038256,
+    "MR": 794.96875,
+    "Hits@1": 0.0,
+    "Hits@3": 0.0,
+    "Hits@10": 0.0
+  },
+  "test_link_prediction_head": {
+    "MRR": 0.00269186976360235,
+    "MR": 667.25,
+    "Hits@1": 0.0,
+    "Hits@3": 0.0,
+    "Hits@10": 0.0
+  },
+  "elapsed_seconds": 8595.07
 }

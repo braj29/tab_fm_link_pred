@@ -143,7 +143,9 @@ def _negative_sample_split(
     seed: int,
     split_name: str,
     relation_tail_pool: Optional[Dict[str, Sequence[str]]] = None,
+    relation_head_pool: Optional[Dict[str, Sequence[str]]] = None,
     hard_negatives: bool = False,
+    corrupt_head_prob: float = 0.5,
     max_tries: int = 50,
 ) -> pd.DataFrame:
     rng = random.Random(seed)
@@ -155,18 +157,32 @@ def _negative_sample_split(
     for head, relation, tail in df.itertuples(index=False, name=None):
         for _ in range(n_neg_per_pos):
             found = False
+            corrupt_head = rng.random() < corrupt_head_prob
             for _ in range(max_tries):
-                if hard_negatives and relation_tail_pool:
-                    candidates = relation_tail_pool.get(relation)
+                if corrupt_head:
+                    if hard_negatives and relation_head_pool:
+                        candidates = relation_head_pool.get(relation)
+                    else:
+                        candidates = None
+                    if candidates:
+                        corrupt_entity = rng.choice(candidates)
+                    else:
+                        corrupt_entity = rng.choice(entity_pool)
+                    if corrupt_entity == head:
+                        continue
+                    candidate = (corrupt_entity, relation, tail)
                 else:
-                    candidates = None
-                if candidates:
-                    corrupt_tail = rng.choice(candidates)
-                else:
-                    corrupt_tail = rng.choice(entity_pool)
-                if corrupt_tail == tail:
-                    continue
-                candidate = (head, relation, corrupt_tail)
+                    if hard_negatives and relation_tail_pool:
+                        candidates = relation_tail_pool.get(relation)
+                    else:
+                        candidates = None
+                    if candidates:
+                        corrupt_entity = rng.choice(candidates)
+                    else:
+                        corrupt_entity = rng.choice(entity_pool)
+                    if corrupt_entity == tail:
+                        continue
+                    candidate = (head, relation, corrupt_entity)
                 if candidate not in positives and candidate not in neg_set:
                     negatives.append(candidate)
                     neg_set.add(candidate)
@@ -210,6 +226,7 @@ def prepare_data(
     n_neg_per_pos: int = 1,
     filter_unseen: bool = True,
     hard_negatives: bool = False,
+    corrupt_head_prob: float = 0.5,
     seed: int = 42,
 ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Load, optionally subsample, and split FB15k-237 into binary features/labels."""
@@ -235,9 +252,12 @@ def prepare_data(
     positives_all.update(test.itertuples(index=False, name=None))
 
     relation_tail_pool: Dict[str, Sequence[str]] = {}
+    relation_head_pool: Dict[str, Sequence[str]] = {}
     if hard_negatives:
         grouped = train.groupby("relation")["tail"].unique()
         relation_tail_pool = {rel: list(tails) for rel, tails in grouped.items()}
+        grouped_heads = train.groupby("relation")["head"].unique()
+        relation_head_pool = {rel: list(heads) for rel, heads in grouped_heads.items()}
 
     train_pos = train.copy()
     train_pos["label"] = 1
@@ -254,7 +274,9 @@ def prepare_data(
         seed=seed,
         split_name="train",
         relation_tail_pool=relation_tail_pool,
+        relation_head_pool=relation_head_pool,
         hard_negatives=hard_negatives,
+        corrupt_head_prob=corrupt_head_prob,
     )
     valid_neg = _negative_sample_split(
         valid,
@@ -264,7 +286,9 @@ def prepare_data(
         seed=seed + 1,
         split_name="valid",
         relation_tail_pool=relation_tail_pool,
+        relation_head_pool=relation_head_pool,
         hard_negatives=hard_negatives,
+        corrupt_head_prob=corrupt_head_prob,
     )
     test_neg = _negative_sample_split(
         test,
@@ -274,7 +298,9 @@ def prepare_data(
         seed=seed + 2,
         split_name="test",
         relation_tail_pool=relation_tail_pool,
+        relation_head_pool=relation_head_pool,
         hard_negatives=hard_negatives,
+        corrupt_head_prob=corrupt_head_prob,
     )
 
     train_labeled = pd.concat([train_pos, train_neg], ignore_index=True)

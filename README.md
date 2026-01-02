@@ -1,7 +1,9 @@
 
 # Tabular FM Link Prediction
 
-This repo hosts a tiny benchmark that compares two tabular foundation models—[TabICL](https://github.com/yandex-research/tabicl) and [TabPFN](https://github.com/automl/TabPFN)—on the FB15k-237 knowledge graph link-prediction task. We turn the triples (head, relation, tail) into a tabular classification problem where the model must predict the tail entity given the head and relation. Experiments default to the full FB15k-237 splits, but you can cap them for quick local smoke tests.
+This repo hosts a small benchmark that compares multiple tabular foundation models on the FB15k-237 knowledge graph link-prediction task: [TabICL](https://github.com/yandex-research/tabicl), [TabPFN](https://github.com/automl/TabPFN), [LimiX](https://github.com/limix-ldm/LimiX), [TabDPT](https://github.com/layer6ai-labs/TabDPT-inference), and [SAINT](https://github.com/somepago/saint). It also includes a RotatE baseline via [PyKEEN](https://github.com/pykeen/pykeen). We turn triples (head, relation, tail) into a binary classification problem over corrupted triples and evaluate with filtered ranking metrics (MRR/MR/Hits@K). Experiments default to the full FB15k-237 splits, but you can cap them for quick local smoke tests.
+
+For non-tabular baselines, KG-BERT is included as a binary text classifier over triples.
 
 Both models operate directly on pandas DataFrames: we keep the raw string identifiers in `head`, `relation`, and `tail` columns and rely on each model's built-in preprocessing to detect categorical features. TabICL automatically ordinal-encodes string/object dtypes and assigns a dedicated category for missing values, while TabPFN accepts the same schema via pandas' internal encoding.
 
@@ -53,7 +55,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 
 Key arguments:
 
-- `--model {tabicl, tabpfn, limix, tabdpt, saint}` (default: `tabicl`).
+- `--model {tabicl, tabpfn, limix, tabdpt, saint, kgbert, rotatee}` (default: `tabicl`).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
 - `--max-samples` to apply a single cap to train/valid/test for quick debugging.
@@ -61,10 +63,11 @@ Key arguments:
 - `--n-neg-per-pos` to control the number of negatives per positive triple (default: 1).
 - `--no-filter-unseen` to keep validation/test triples with unseen entities.
 - `--hard-negatives` to sample relation-consistent negatives (harder).
+- `--classification-metrics` to also compute accuracy/F1/ROC-AUC on the binary triple classification task.
 
 Under the hood `src/run.py` orchestrates the following pipeline:
 
-1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. It then adds negative samples and returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head`, `relation`, and `tail` columns (dtype `object`) and `y_*` is a binary label (`1` = true triple, `0` = corrupted).
+1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. It then adds negative samples by corrupting head or tail (50/50 by default) and returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head`, `relation`, and `tail` columns (dtype `object`) and `y_*` is a binary label (`1` = true triple, `0` = corrupted).
 2. `src/model.py` instantiates the requested model (TabICL, TabPFN, LimiX, TabDPT, or SAINT).
 3. `src/metrics.py` computes filtered ranking metrics (MRR, MR, Hits@k) by scoring candidate tails with the binary classifier.
 
@@ -83,6 +86,19 @@ Example output snippet:
 Results are written to `experiment_metrics.json` by default; override with `--output /path/to/file.json` to save elsewhere.
 
 Note: The current benchmark treats link prediction as binary classification over (head, relation, tail) with negative sampling. Ranking metrics are computed by scoring candidate tails with the binary classifier and applying filtered evaluation.
+
+### Evaluation modes
+
+- **Ranking evaluation (default)**: MRR/MR/Hits@K for head/tail prediction (filtered).
+- **Classification evaluation**: binary accuracy/F1/ROC-AUC on the generated triple classification set (`--classification-metrics`).
+
+## Ranking-only evaluation
+
+To train a binary model and run a dedicated ranking evaluation pass:
+
+```bash
+uv run python src/run_ranking_eval.py --model tabicl --max-train 1000 --max-valid 500 --max-test 500
+```
 
 ## TabDPT integration (optional)
 
@@ -108,6 +124,30 @@ Example:
 uv run python main.py --model saint \
   --saint-path /path/to/saint \
   --max-train 1000 --max-valid 500 --max-test 500
+```
+
+## KG-BERT integration (optional)
+
+KG-BERT uses a BERT sequence classifier over serialized triples in the format
+`[HEAD] <head> [REL] <relation> [TAIL] <tail>`. You can pass a different
+Hugging Face model id via `--kgbert-model`.
+
+Example:
+
+```bash
+uv run python main.py --model kgbert \
+  --kgbert-model bert-base-uncased \
+  --max-train 1000 --max-valid 500 --max-test 500
+```
+
+## RotatE (PyKEEN) baseline
+
+RotatE runs through PyKEEN but is evaluated through the same binary pipeline by scoring triples and applying filtered ranking metrics.
+
+Example:
+
+```bash
+uv run python main.py --model rotatee --rotatee-epochs 100 --rotatee-dim 200 --rotatee-batchsize 1024
 ```
 
 ## LimiX integration (optional)

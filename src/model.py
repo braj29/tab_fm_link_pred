@@ -456,6 +456,125 @@ def build_tabdpt(
     )
 
 
+class KGBERTBinaryClassifier:
+    """Binary classifier wrapper using a BERT sequence classifier."""
+
+    def __init__(
+        self,
+        model_name: str = "bert-base-uncased",
+        device: Optional[str] = None,
+        max_length: int = 64,
+        lr: float = 2e-5,
+        epochs: int = 3,
+        batchsize: int = 16,
+        seed: int = 42,
+    ) -> None:
+        import numpy as np
+        import torch
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+        self._np = np
+        self._torch = torch
+        self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self._model = AutoModelForSequenceClassification.from_pretrained(
+            model_name, num_labels=2
+        ).to(self._device)
+        special_tokens = {"additional_special_tokens": ["[HEAD]", "[REL]", "[TAIL]"]}
+        self._tokenizer.add_special_tokens(special_tokens)
+        self._model.resize_token_embeddings(len(self._tokenizer))
+        self._max_length = max_length
+        self._lr = lr
+        self._epochs = epochs
+        self._batchsize = batchsize
+        self._seed = seed
+        self.classes_ = np.array([0, 1])
+
+    def _format_text(self, X):
+        return [
+            f"[HEAD] {h} [REL] {r} [TAIL] {t}"
+            for h, r, t in zip(X["head"], X["relation"], X["tail"], strict=False)
+        ]
+
+    def fit(self, X, y) -> "KGBERTBinaryClassifier":
+        torch = self._torch
+        torch.manual_seed(self._seed)
+        inputs = self._tokenizer(
+            self._format_text(X),
+            padding=True,
+            truncation=True,
+            max_length=self._max_length,
+            return_tensors="pt",
+        )
+        labels = torch.tensor(self._np.asarray(y, dtype=self._np.int64))
+        dataset = torch.utils.data.TensorDataset(
+            inputs["input_ids"], inputs["attention_mask"], labels
+        )
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self._batchsize, shuffle=True)
+        optimizer = torch.optim.AdamW(self._model.parameters(), lr=self._lr)
+        self._model.train()
+        for _ in range(self._epochs):
+            for input_ids, attention_mask, labels in loader:
+                input_ids = input_ids.to(self._device)
+                attention_mask = attention_mask.to(self._device)
+                labels = labels.to(self._device)
+                outputs = self._model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                )
+                loss = outputs.loss
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+        return self
+
+    def predict_proba(self, X):
+        torch = self._torch
+        self._model.eval()
+        inputs = self._tokenizer(
+            self._format_text(X),
+            padding=True,
+            truncation=True,
+            max_length=self._max_length,
+            return_tensors="pt",
+        )
+        dataset = torch.utils.data.TensorDataset(
+            inputs["input_ids"], inputs["attention_mask"]
+        )
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self._batchsize, shuffle=False)
+        probs = []
+        with torch.no_grad():
+            for input_ids, attention_mask in loader:
+                input_ids = input_ids.to(self._device)
+                attention_mask = attention_mask.to(self._device)
+                outputs = self._model(input_ids=input_ids, attention_mask=attention_mask)
+                probs.append(torch.softmax(outputs.logits, dim=1).cpu().numpy())
+        return self._np.concatenate(probs, axis=0)
+
+
+def build_kgbert(
+    model_name: str = "bert-base-uncased",
+    device: Optional[str] = None,
+    max_length: int = 64,
+    lr: float = 2e-5,
+    epochs: int = 3,
+    batchsize: int = 16,
+    seed: int = 42,
+) -> KGBERTBinaryClassifier:
+    """Build a KG-BERT wrapper classifier."""
+
+    return KGBERTBinaryClassifier(
+        model_name=model_name,
+        device=device,
+        max_length=max_length,
+        lr=lr,
+        epochs=epochs,
+        batchsize=batchsize,
+        seed=seed,
+    )
+
+
 def build_saint(
     device: Optional[str] = None,
     saint_path: Optional[str] = None,
@@ -486,5 +605,109 @@ def build_saint(
         lr=lr,
         epochs=epochs,
         batchsize=batchsize,
+        seed=seed,
+    )
+
+
+class RotatEBinaryClassifier:
+    """Binary classifier wrapper using RotatE scores."""
+
+    def __init__(
+        self,
+        embedding_dim: int = 200,
+        epochs: int = 100,
+        batchsize: int = 1024,
+        lr: float = 1e-3,
+        device: Optional[str] = None,
+        seed: int = 42,
+    ) -> None:
+        import numpy as np
+        import torch
+
+        self._np = np
+        self._torch = torch
+        self._embedding_dim = embedding_dim
+        self._epochs = epochs
+        self._batchsize = batchsize
+        self._lr = lr
+        self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self._seed = seed
+        self.classes_ = np.array([0, 1])
+        self._model = None
+        self._entity_to_id = {}
+        self._relation_to_id = {}
+
+    def fit(self, X, y) -> "RotatEBinaryClassifier":
+        from pykeen.pipeline import pipeline
+        from pykeen.triples import TriplesFactory
+
+        X_pos = X[y == 1]
+        triples = X_pos[["head", "relation", "tail"]].to_numpy(dtype=str)
+        train_tf = TriplesFactory.from_labeled_triples(triples)
+
+        result = pipeline(
+            training=train_tf,
+            testing=train_tf,
+            model="RotatE",
+            model_kwargs={"embedding_dim": self._embedding_dim},
+            training_kwargs={"num_epochs": self._epochs, "batch_size": self._batchsize},
+            optimizer_kwargs={"lr": self._lr},
+            training_loop="sLCWA",
+            device=str(self._device),
+            random_seed=self._seed,
+        )
+
+        self._model = result.model
+        self._entity_to_id = train_tf.entity_to_id
+        self._relation_to_id = train_tf.relation_to_id
+        return self
+
+    def predict_proba(self, X):
+        if self._model is None:
+            raise ValueError("RotatEBinaryClassifier must be fit before predict_proba.")
+        torch = self._torch
+
+        heads = X["head"].map(self._entity_to_id.get).to_numpy()
+        rels = X["relation"].map(self._relation_to_id.get).to_numpy()
+        tails = X["tail"].map(self._entity_to_id.get).to_numpy()
+        known_mask = (heads != None) & (rels != None) & (tails != None)
+
+        scores = self._np.full(len(X), -1e9, dtype=self._np.float32)
+        if known_mask.any():
+            hrt = torch.tensor(
+                self._np.stack(
+                    [
+                        heads[known_mask].astype(self._np.int64),
+                        rels[known_mask].astype(self._np.int64),
+                        tails[known_mask].astype(self._np.int64),
+                    ],
+                    axis=1,
+                ),
+                device=self._device,
+            )
+            with torch.no_grad():
+                batch_scores = self._model.score_hrt(hrt).cpu().numpy()
+            scores[known_mask] = batch_scores.reshape(-1)
+
+        probs = 1.0 / (1.0 + self._np.exp(-scores))
+        return self._np.stack([1.0 - probs, probs], axis=1)
+
+
+def build_rotatee(
+    embedding_dim: int = 200,
+    epochs: int = 100,
+    batchsize: int = 1024,
+    lr: float = 1e-3,
+    device: Optional[str] = None,
+    seed: int = 42,
+) -> RotatEBinaryClassifier:
+    """Build a RotatE wrapper classifier."""
+
+    return RotatEBinaryClassifier(
+        embedding_dim=embedding_dim,
+        epochs=epochs,
+        batchsize=batchsize,
+        lr=lr,
+        device=device,
         seed=seed,
     )

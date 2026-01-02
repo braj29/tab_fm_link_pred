@@ -8,6 +8,7 @@ import pandas as pd
 from sklearn.base import ClassifierMixin
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
+from sklearn.metrics import f1_score, roc_auc_score
 
 
 def classification_accuracy(
@@ -31,6 +32,26 @@ def classification_log_loss(
     return float(log_loss(y, proba, labels=clf.classes_))
 
 
+def binary_classification_metrics(
+    clf: ClassifierMixin,
+    X: pd.DataFrame,
+    y: pd.Series,
+    threshold: float = 0.5,
+) -> Mapping[str, float]:
+    """Return accuracy/F1/ROC-AUC for binary classifiers."""
+
+    proba = clf.predict_proba(X)
+    classes = getattr(clf, "classes_", np.array([0, 1]))
+    pos_idx = int(list(classes).index(1))
+    y_score = proba[:, pos_idx]
+    y_pred = (y_score >= threshold).astype(int)
+    return {
+        "accuracy": float(accuracy_score(y, y_pred)),
+        "f1": float(f1_score(y, y_pred)),
+        "roc_auc": float(roc_auc_score(y, y_score)),
+    }
+
+
 def _build_filter_map(
     triples: pd.DataFrame,
 ) -> Dict[Tuple[str, str], Set[str]]:
@@ -47,6 +68,7 @@ def filtered_ranking_metrics_binary(
     candidate_entities: Sequence[str],
     positives: pd.DataFrame,
     hits_ks: Sequence[int] = (1, 3, 10),
+    predict: str = "tail",
 ) -> Mapping[str, float]:
     """Compute filtered MRR/MR/Hits@k for binary link prediction.
 
@@ -61,29 +83,50 @@ def filtered_ranking_metrics_binary(
     if 1 not in clf.classes_:
         raise ValueError("Classifier does not expose label 1 for positive class.")
     pos_index = int(list(clf.classes_).index(1))
-    filter_map = _build_filter_map(positives)
+    if predict not in {"tail", "head"}:
+        raise ValueError("predict must be 'tail' or 'head'")
+
+    if predict == "tail":
+        filter_map = _build_filter_map(positives)
+    else:
+        head_map: Dict[Tuple[str, str], Set[str]] = {}
+        keys = positives.loc[:, ["relation", "tail"]].itertuples(index=False, name=None)
+        for key, head in zip(keys, positives["head"], strict=False):
+            head_map.setdefault(key, set()).add(head)
+        filter_map = head_map
     entity_to_idx = {ent: idx for idx, ent in enumerate(candidate_entities)}
 
     ranks = []
     hits = {k: 0 for k in hits_ks}
 
     for head, relation, tail in triples.itertuples(index=False, name=None):
-        candidates = pd.DataFrame({
-            "head": [head] * len(candidate_entities),
-            "relation": [relation] * len(candidate_entities),
-            "tail": list(candidate_entities),
-        })
+        if predict == "tail":
+            candidates = pd.DataFrame({
+                "head": [head] * len(candidate_entities),
+                "relation": [relation] * len(candidate_entities),
+                "tail": list(candidate_entities),
+            })
+            filter_key = (head, relation)
+            gold_entity = tail
+        else:
+            candidates = pd.DataFrame({
+                "head": list(candidate_entities),
+                "relation": [relation] * len(candidate_entities),
+                "tail": [tail] * len(candidate_entities),
+            })
+            filter_key = (relation, tail)
+            gold_entity = head
         scores = clf.predict_proba(candidates)[:, pos_index]
 
-        for other_tail in filter_map.get((head, relation), set()):
-            if other_tail == tail:
+        for other_entity in filter_map.get(filter_key, set()):
+            if other_entity == gold_entity:
                 continue
-            idx = entity_to_idx.get(other_tail)
+            idx = entity_to_idx.get(other_entity)
             if idx is None:
                 continue
             scores[idx] = -np.inf
 
-        gold_idx = entity_to_idx.get(tail)
+        gold_idx = entity_to_idx.get(gold_entity)
         if gold_idx is None:
             continue
         sorted_idx = np.argsort(-scores)

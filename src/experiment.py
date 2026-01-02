@@ -17,7 +17,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from data import prepare_data
-from metrics import filtered_ranking_metrics_binary
+from metrics import binary_classification_metrics, filtered_ranking_metrics_binary
 
 _model_path = SRC_DIR / "model.py"
 _spec = importlib.util.spec_from_file_location("tab_fm_model", _model_path)
@@ -30,6 +30,8 @@ build_tabicl = _model_module.build_tabicl
 build_tabpfn = _model_module.build_tabpfn
 build_tabdpt = _model_module.build_tabdpt
 build_saint = _model_module.build_saint
+build_kgbert = _model_module.build_kgbert
+build_rotatee = _model_module.build_rotatee
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -38,7 +40,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         type=str,
         default="tabicl",
-        choices=["tabicl", "tabpfn", "limix", "tabdpt", "saint"],
+        choices=["tabicl", "tabpfn", "limix", "tabdpt", "saint", "kgbert", "rotatee"],
     )
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument(
@@ -85,6 +87,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--hard-negatives",
         action="store_true",
         help="Sample relation-consistent negatives (harder).",
+    )
+    parser.add_argument(
+        "--corrupt-head-prob",
+        type=float,
+        default=0.5,
+        help="Probability of corrupting head when sampling negatives.",
+    )
+    parser.add_argument(
+        "--classification-metrics",
+        action="store_true",
+        help="Also compute binary classification metrics (accuracy/F1/ROC-AUC).",
     )
     parser.add_argument(
         "--limix-model-id",
@@ -206,6 +219,54 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="SAINT batch size.",
     )
     parser.add_argument(
+        "--kgbert-model",
+        type=str,
+        default="bert-base-uncased",
+        help="Hugging Face model id for KG-BERT baseline.",
+    )
+    parser.add_argument(
+        "--kgbert-max-length",
+        type=int,
+        default=64,
+        help="Max sequence length for KG-BERT tokenization.",
+    )
+    parser.add_argument(
+        "--kgbert-lr",
+        type=float,
+        default=2e-5,
+        help="KG-BERT learning rate.",
+    )
+    parser.add_argument(
+        "--kgbert-epochs",
+        type=int,
+        default=3,
+        help="KG-BERT fine-tuning epochs.",
+    )
+    parser.add_argument(
+        "--kgbert-batchsize",
+        type=int,
+        default=16,
+        help="KG-BERT batch size.",
+    )
+    parser.add_argument(
+        "--rotatee-epochs",
+        type=int,
+        default=100,
+        help="RotatE training epochs (PyKEEN).",
+    )
+    parser.add_argument(
+        "--rotatee-dim",
+        type=int,
+        default=200,
+        help="RotatE embedding dimension (PyKEEN).",
+    )
+    parser.add_argument(
+        "--rotatee-batchsize",
+        type=int,
+        default=1024,
+        help="RotatE batch size (PyKEEN).",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -240,6 +301,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             n_neg_per_pos=args.n_neg_per_pos,
             filter_unseen=not args.no_filter_unseen,
             hard_negatives=args.hard_negatives,
+            corrupt_head_prob=args.corrupt_head_prob,
         )
         if args.overfit_small:
             X_valid, y_valid = X_train.copy(), y_train.copy()
@@ -289,6 +351,27 @@ def run_experiment(args: argparse.Namespace) -> None:
                 batchsize=args.saint_batchsize,
                 seed=42,
             )
+        elif args.model == "kgbert":
+            print("=== Building KG-BERT ===")
+            clf = build_kgbert(
+                model_name=args.kgbert_model,
+                device=None if args.device == "auto" else args.device,
+                max_length=args.kgbert_max_length,
+                lr=args.kgbert_lr,
+                epochs=args.kgbert_epochs,
+                batchsize=args.kgbert_batchsize,
+                seed=42,
+            )
+        elif args.model == "rotatee":
+            print("=== Building RotatE ===")
+            clf = build_rotatee(
+                embedding_dim=args.rotatee_dim,
+                epochs=args.rotatee_epochs,
+                batchsize=args.rotatee_batchsize,
+                device=None if args.device == "auto" else args.device,
+                lr=1e-3,
+                seed=42,
+            )
         else:
             raise ValueError(f"Unknown model type: {args.model}")
 
@@ -298,6 +381,14 @@ def run_experiment(args: argparse.Namespace) -> None:
         print("=== Task definition ===")
         print("Binary link prediction (head, relation, tail -> true/false). Classes: 2")
 
+        if args.classification_metrics:
+            print("=== Validation classification metrics ===")
+            val_cls = binary_classification_metrics(clf, X_valid, y_valid)
+            print(val_cls)
+            print("=== Test classification metrics ===")
+            test_cls = binary_classification_metrics(clf, X_test, y_test)
+            print(test_cls)
+
         train_pos = X_train[y_train == 1].copy()
         valid_pos = X_valid[y_valid == 1].copy()
         test_pos = X_test[y_test == 1].copy()
@@ -306,23 +397,45 @@ def run_experiment(args: argparse.Namespace) -> None:
         candidate_entities = sorted(set(train_pos["head"]).union(train_pos["tail"]))
         print(f"=== Candidate entities (train): {len(candidate_entities)} ===")
 
-        print("=== Validation ranking metrics ===")
-        val_lp = filtered_ranking_metrics_binary(
+        print("=== Validation ranking metrics (tail prediction) ===")
+        val_lp_tail = filtered_ranking_metrics_binary(
             clf,
             valid_pos,
             candidate_entities,
             all_pos,
+            predict="tail",
         )
-        print(val_lp)
+        print(val_lp_tail)
 
-        print("=== Test ranking metrics ===")
-        test_lp = filtered_ranking_metrics_binary(
+        print("=== Validation ranking metrics (head prediction) ===")
+        val_lp_head = filtered_ranking_metrics_binary(
+            clf,
+            valid_pos,
+            candidate_entities,
+            all_pos,
+            predict="head",
+        )
+        print(val_lp_head)
+
+        print("=== Test ranking metrics (tail prediction) ===")
+        test_lp_tail = filtered_ranking_metrics_binary(
             clf,
             test_pos,
             candidate_entities,
             all_pos,
+            predict="tail",
         )
-        print(test_lp)
+        print(test_lp_tail)
+
+        print("=== Test ranking metrics (head prediction) ===")
+        test_lp_head = filtered_ranking_metrics_binary(
+            clf,
+            test_pos,
+            candidate_entities,
+            all_pos,
+            predict="head",
+        )
+        print(test_lp_head)
 
         metrics = {
             "model": args.model,
@@ -331,10 +444,15 @@ def run_experiment(args: argparse.Namespace) -> None:
             "max_valid": max_valid,
             "max_test": max_test,
             "overfit_small": args.overfit_small,
-            "val_link_prediction": val_lp,
-            "test_link_prediction": test_lp,
+            "val_link_prediction_tail": val_lp_tail,
+            "val_link_prediction_head": val_lp_head,
+            "test_link_prediction_tail": test_lp_tail,
+            "test_link_prediction_head": test_lp_head,
             "elapsed_seconds": round(time.time() - start, 2),
         }
+        if args.classification_metrics:
+            metrics["val_classification"] = val_cls
+            metrics["test_classification"] = test_cls
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(metrics, indent=2))

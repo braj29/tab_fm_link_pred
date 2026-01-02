@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations: &id001
+    eidf/user: pminervini
+    groups: eidf097 eidf097-host1-login eidf-gateway-login
+    home: /home/eidf097/eidf097/pminervini
+    login_user: pminervini
+    shell: /bin/bash
+  labels: &id002
+    eidf/user: pminervini
+    kueue.x-k8s.io/queue-name: eidf097ns-user-queue
+  generateName: raj-kgbert-1000-
+  namespace: eidf097ns
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      annotations: *id001
+      labels: *id002
+    spec:
+      containers:
+        - name: raj-kgbert-1000
+          image: ubuntu:22.04
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: HF_HOME
+              value: /workspace/.cache/huggingface
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euxo pipefail
+              echo "Step 1: apt-get update"
+              apt-get update
+              echo "Step 2: install deps"
+              apt-get install -y git curl python3
+              echo "Step 3: install uv"
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              echo "Step 4: clone repo"
+              git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred
+              echo "Step 5: uv sync"
+              cd /workspace/tab_fm_link_pred
+              /root/.local/bin/uv sync --frozen
+              /root/.local/bin/uv pip install huggingface_hub transformers torch
+              echo "Step 6: run experiment"
+              /root/.local/bin/uv run python -u main.py --model kgbert --max-train 1000 --max-valid 500 --max-test 500 --output /workspace/tab_fm_link_pred/experiment_metrics_kgbert_1000.json
+          resources:
+            limits:
+              cpu: 1
+              memory: 8Gi
+              nvidia.com/gpu: 1
+            requests:
+              cpu: 1
+              memory: 8Gi
+      restartPolicy: Never
