@@ -64,6 +64,7 @@ Key arguments:
 - `--no-filter-unseen` to keep validation/test triples with unseen entities.
 - `--hard-negatives` to sample relation-consistent negatives (harder).
 - `--classification-metrics` to also compute accuracy/F1/ROC-AUC on the binary triple classification task.
+- `--classification-threshold` to set the decision threshold for classification metrics (default: 0.5).
 
 Under the hood `src/run.py` orchestrates the following pipeline:
 
@@ -91,6 +92,7 @@ Note: The current benchmark treats link prediction as binary classification over
 
 - **Ranking evaluation (default)**: MRR/MR/Hits@K for head/tail prediction (filtered).
 - **Classification evaluation**: binary accuracy/F1/ROC-AUC on the generated triple classification set (`--classification-metrics`).
+  Use `--classification-threshold` to tune the decision boundary (e.g., per-relation tuning if desired).
 
 ## Ranking-only evaluation
 

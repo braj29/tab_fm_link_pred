@@ -100,6 +100,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Also compute binary classification metrics (accuracy/F1/ROC-AUC).",
     )
     parser.add_argument(
+        "--classification-threshold",
+        type=float,
+        default=0.5,
+        help="Threshold for binary classification metrics.",
+    )
+    parser.add_argument(
         "--limix-model-id",
         type=str,
         default="stableai-org/LimiX-16M",
@@ -383,10 +389,14 @@ def run_experiment(args: argparse.Namespace) -> None:
 
         if args.classification_metrics:
             print("=== Validation classification metrics ===")
-            val_cls = binary_classification_metrics(clf, X_valid, y_valid)
+            val_cls = binary_classification_metrics(
+                clf, X_valid, y_valid, threshold=args.classification_threshold
+            )
             print(val_cls)
             print("=== Test classification metrics ===")
-            test_cls = binary_classification_metrics(clf, X_test, y_test)
+            test_cls = binary_classification_metrics(
+                clf, X_test, y_test, threshold=args.classification_threshold
+            )
             print(test_cls)
 
         train_pos = X_train[y_train == 1].copy()
