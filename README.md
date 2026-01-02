@@ -54,6 +54,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 Key arguments:
 
 - `--model {tabicl, tabpfn, limix, tabdpt}` (default: `tabicl`).
+- `--model saint` to use SAINT (requires separate install; see below).
 - `--model limix` to use the LimiX predictor (requires separate install; see below).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
@@ -95,6 +96,19 @@ Example:
 ```bash
 uv run python main.py --model tabdpt \
   --tabdpt-path /path/to/TabDPT-inference \
+  --max-train 1000 --max-valid 500 --max-test 500
+```
+
+## SAINT integration (optional)
+
+SAINT lives at https://github.com/somepago/saint. Clone it and point `--saint-path`
+to the repo root.
+
+Example:
+
+```bash
+uv run python main.py --model saint \
+  --saint-path /path/to/saint \
   --max-train 1000 --max-valid 500 --max-test 500
 ```
 

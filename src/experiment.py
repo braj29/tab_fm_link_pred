@@ -29,6 +29,7 @@ build_limix = _model_module.build_limix
 build_tabicl = _model_module.build_tabicl
 build_tabpfn = _model_module.build_tabpfn
 build_tabdpt = _model_module.build_tabdpt
+build_saint = _model_module.build_saint
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -37,7 +38,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         type=str,
         default="tabicl",
-        choices=["tabicl", "tabpfn", "limix", "tabdpt"],
+        choices=["tabicl", "tabpfn", "limix", "tabdpt", "saint"],
     )
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument(
@@ -157,6 +158,54 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Permute class labels across ensembles for TabDPT.",
     )
     parser.add_argument(
+        "--saint-path",
+        type=str,
+        default=None,
+        help="Path to local SAINT repo (adds to PYTHONPATH).",
+    )
+    parser.add_argument(
+        "--saint-embedding-size",
+        type=int,
+        default=32,
+        help="SAINT embedding size.",
+    )
+    parser.add_argument(
+        "--saint-depth",
+        type=int,
+        default=6,
+        help="SAINT transformer depth.",
+    )
+    parser.add_argument(
+        "--saint-heads",
+        type=int,
+        default=8,
+        help="SAINT attention heads.",
+    )
+    parser.add_argument(
+        "--saint-attentiontype",
+        type=str,
+        default="colrow",
+        help="SAINT attention type (col/row/colrow/justmlp/attn/attnmlp).",
+    )
+    parser.add_argument(
+        "--saint-lr",
+        type=float,
+        default=1e-4,
+        help="SAINT learning rate.",
+    )
+    parser.add_argument(
+        "--saint-epochs",
+        type=int,
+        default=20,
+        help="SAINT epochs.",
+    )
+    parser.add_argument(
+        "--saint-batchsize",
+        type=int,
+        default=256,
+        help="SAINT batch size.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -224,6 +273,20 @@ def run_experiment(args: argparse.Namespace) -> None:
                 temperature=args.tabdpt_temperature,
                 context_size=args.tabdpt_context_size,
                 permute_classes=args.tabdpt_permute_classes,
+                seed=42,
+            )
+        elif args.model == "saint":
+            print("=== Building SAINT ===")
+            clf = build_saint(
+                device=None if args.device == "auto" else args.device,
+                saint_path=args.saint_path,
+                embedding_size=args.saint_embedding_size,
+                transformer_depth=args.saint_depth,
+                attention_heads=args.saint_heads,
+                attentiontype=args.saint_attentiontype,
+                lr=args.saint_lr,
+                epochs=args.saint_epochs,
+                batchsize=args.saint_batchsize,
                 seed=42,
             )
         else:

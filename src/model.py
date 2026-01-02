@@ -3,6 +3,7 @@
 
 from typing import Literal, Optional, Sequence
 
+import os
 import sys
 
 from tabicl import TabICLClassifier
@@ -225,6 +226,190 @@ class TabDPTBinaryClassifier:
         )
 
 
+class SAINTBinaryClassifier:
+    """Wrapper to use SAINT for binary classification."""
+
+    def __init__(
+        self,
+        device: Optional[str] = None,
+        saint_path: Optional[str] = None,
+        embedding_size: int = 32,
+        transformer_depth: int = 6,
+        attention_heads: int = 8,
+        attention_dropout: float = 0.1,
+        ff_dropout: float = 0.1,
+        attentiontype: str = "colrow",
+        cont_embeddings: str = "MLP",
+        lr: float = 1e-4,
+        epochs: int = 20,
+        batchsize: int = 256,
+        seed: int = 42,
+    ) -> None:
+        import numpy as np
+        import pandas as pd
+        import torch
+
+        if saint_path is None:
+            env_path = os.environ.get("SAINT_PATH")
+            if env_path:
+                saint_path = env_path
+            else:
+                candidates = [
+                    "saint",
+                    "SAINT",
+                    "saint-main",
+                    "../saint",
+                    "../SAINT",
+                    "../saint-main",
+                ]
+                for candidate in candidates:
+                    candidate_path = os.path.abspath(candidate)
+                    if os.path.isfile(os.path.join(candidate_path, "models", "pretrainmodel.py")):
+                        saint_path = candidate_path
+                        break
+
+        if saint_path:
+            saint_path = os.path.abspath(saint_path)
+            if saint_path not in sys.path:
+                sys.path.insert(0, saint_path)
+
+        try:
+            from models.pretrainmodel import SAINT
+            from augmentations import embed_data_mask
+            from data_openml import DataSetCatCon
+        except ImportError as exc:
+            raise ImportError(
+                "SAINT is not installed. Follow https://github.com/somepago/saint."
+            ) from exc
+
+        self._np = np
+        self._pd = pd
+        self._torch = torch
+        self._embed_data_mask = embed_data_mask
+        self._dataset_cls = DataSetCatCon
+        self._SAINT = SAINT
+        self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self._embedding_size = embedding_size
+        self._transformer_depth = transformer_depth
+        self._attention_heads = attention_heads
+        self._attention_dropout = attention_dropout
+        self._ff_dropout = ff_dropout
+        self._attentiontype = attentiontype
+        self._cont_embeddings = cont_embeddings
+        self._lr = lr
+        self._epochs = epochs
+        self._batchsize = batchsize
+        self._seed = seed
+        self._columns: list[str] = []
+        self._categories: dict[str, list[str]] = {}
+        self._cat_sizes: list[int] = []
+        self._model: Optional[torch.nn.Module] = None
+        self.classes_ = np.array([0, 1])
+
+    def _encode(self, X) -> "np.ndarray":
+        pd = self._pd
+        np = self._np
+        cols = []
+        for col in self._columns:
+            categories = self._categories[col]
+            values = X[col].where(X[col].isin(categories), "__UNK__")
+            cat = pd.Categorical(values, categories=categories)
+            cols.append(cat.codes.astype(np.int64))
+        return np.stack(cols, axis=1)
+
+    def _make_dataset(self, X, y):
+        np = self._np
+        data = self._encode(X)
+        mask = np.ones_like(data)
+        X_dict = {"data": data, "mask": mask}
+        y_arr = np.asarray(y, dtype=np.int64).reshape(-1, 1)
+        y_dict = {"data": y_arr}
+        cat_cols = list(range(data.shape[1]))
+        return self._dataset_cls(X_dict, y_dict, cat_cols, task="clf")
+
+    def fit(self, X, y) -> "SAINTBinaryClassifier":
+        torch = self._torch
+        np = self._np
+        torch.manual_seed(self._seed)
+        np.random.seed(self._seed)
+
+        self._columns = list(X.columns)
+        self._categories = {
+            col: self._pd.Categorical(X[col]).categories.tolist() + ["__UNK__"]
+            for col in self._columns
+        }
+        self._cat_sizes = [1] + [len(self._categories[col]) for col in self._columns]
+
+        model = self._SAINT(
+            categories=self._cat_sizes,
+            num_continuous=0,
+            dim=self._embedding_size,
+            depth=self._transformer_depth,
+            heads=self._attention_heads,
+            attn_dropout=self._attention_dropout,
+            ff_dropout=self._ff_dropout,
+            cont_embeddings=self._cont_embeddings,
+            attentiontype=self._attentiontype,
+            y_dim=2,
+        ).to(self._device)
+
+        dataset = self._make_dataset(X, y)
+        loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=self._batchsize,
+            shuffle=True,
+        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=self._lr)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        model.train()
+        for _ in range(self._epochs):
+            for x_categ, x_cont, y_gts, cat_mask, con_mask in loader:
+                x_categ = x_categ.to(self._device)
+                x_cont = x_cont.to(self._device)
+                y_gts = y_gts.to(self._device)
+                cat_mask = cat_mask.to(self._device)
+                con_mask = con_mask.to(self._device)
+
+                _, x_categ_enc, x_cont_enc = self._embed_data_mask(
+                    x_categ, x_cont, cat_mask, con_mask, model
+                )
+                reps = model.transformer(x_categ_enc, x_cont_enc)
+                y_reps = reps[:, 0, :]
+                y_outs = model.mlpfory(y_reps)
+                loss = criterion(y_outs, y_gts.squeeze())
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        self._model = model
+        return self
+
+    def predict_proba(self, X):
+        if self._model is None:
+            raise ValueError("SAINTBinaryClassifier must be fit before predict_proba.")
+        torch = self._torch
+        model = self._model
+        dataset = self._make_dataset(X, self._np.zeros(len(X), dtype=int))
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self._batchsize, shuffle=False)
+        model.eval()
+        probs = []
+        with torch.no_grad():
+            for x_categ, x_cont, y_gts, cat_mask, con_mask in loader:
+                x_categ = x_categ.to(self._device)
+                x_cont = x_cont.to(self._device)
+                cat_mask = cat_mask.to(self._device)
+                con_mask = con_mask.to(self._device)
+                _, x_categ_enc, x_cont_enc = self._embed_data_mask(
+                    x_categ, x_cont, cat_mask, con_mask, model
+                )
+                reps = model.transformer(x_categ_enc, x_cont_enc)
+                y_reps = reps[:, 0, :]
+                y_outs = model.mlpfory(y_reps)
+                probs.append(torch.softmax(y_outs, dim=1).cpu().numpy())
+        return self._np.concatenate(probs, axis=0)
+
+
 def build_limix(
     device: Literal["auto", "cpu", "cuda"] = "auto",
     model_path: Optional[str] = None,
@@ -267,5 +452,39 @@ def build_tabdpt(
         temperature=temperature,
         context_size=context_size,
         permute_classes=permute_classes,
+        seed=seed,
+    )
+
+
+def build_saint(
+    device: Optional[str] = None,
+    saint_path: Optional[str] = None,
+    embedding_size: int = 32,
+    transformer_depth: int = 6,
+    attention_heads: int = 8,
+    attention_dropout: float = 0.1,
+    ff_dropout: float = 0.1,
+    attentiontype: str = "colrow",
+    cont_embeddings: str = "MLP",
+    lr: float = 1e-4,
+    epochs: int = 20,
+    batchsize: int = 256,
+    seed: int = 42,
+) -> SAINTBinaryClassifier:
+    """Build a SAINT wrapper classifier."""
+
+    return SAINTBinaryClassifier(
+        device=device,
+        saint_path=saint_path,
+        embedding_size=embedding_size,
+        transformer_depth=transformer_depth,
+        attention_heads=attention_heads,
+        attention_dropout=attention_dropout,
+        ff_dropout=ff_dropout,
+        attentiontype=attentiontype,
+        cont_embeddings=cont_embeddings,
+        lr=lr,
+        epochs=epochs,
+        batchsize=batchsize,
         seed=seed,
     )
