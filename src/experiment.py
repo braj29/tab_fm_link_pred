@@ -32,6 +32,7 @@ build_tabdpt = _model_module.build_tabdpt
 build_saint = _model_module.build_saint
 build_kgbert = _model_module.build_kgbert
 build_rotatee = _model_module.build_rotatee
+build_complex = _model_module.build_complex
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -40,7 +41,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         type=str,
         default="tabicl",
-        choices=["tabicl", "tabpfn", "limix", "tabdpt", "saint", "kgbert", "rotatee"],
+        choices=[
+            "tabicl",
+            "tabpfn",
+            "limix",
+            "tabdpt",
+            "saint",
+            "kgbert",
+            "rotatee",
+            "complex",
+        ],
     )
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument(
@@ -273,6 +283,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="RotatE batch size (PyKEEN).",
     )
     parser.add_argument(
+        "--complex-epochs",
+        type=int,
+        default=100,
+        help="ComplEx training epochs (PyKEEN).",
+    )
+    parser.add_argument(
+        "--complex-dim",
+        type=int,
+        default=200,
+        help="ComplEx embedding dimension (PyKEEN).",
+    )
+    parser.add_argument(
+        "--complex-batchsize",
+        type=int,
+        default=1024,
+        help="ComplEx batch size (PyKEEN).",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -374,6 +402,16 @@ def run_experiment(args: argparse.Namespace) -> None:
                 embedding_dim=args.rotatee_dim,
                 epochs=args.rotatee_epochs,
                 batchsize=args.rotatee_batchsize,
+                device=None if args.device == "auto" else args.device,
+                lr=1e-3,
+                seed=42,
+            )
+        elif args.model == "complex":
+            print("=== Building ComplEx ===")
+            clf = build_complex(
+                embedding_dim=args.complex_dim,
+                epochs=args.complex_epochs,
+                batchsize=args.complex_batchsize,
                 device=None if args.device == "auto" else args.device,
                 lr=1e-3,
                 seed=42,

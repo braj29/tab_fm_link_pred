@@ -1,7 +1,7 @@
 
 # Tabular FM Link Prediction
 
-This repo hosts a small benchmark that compares multiple tabular foundation models on the FB15k-237 knowledge graph link-prediction task: [TabICL](https://github.com/yandex-research/tabicl), [TabPFN](https://github.com/automl/TabPFN), [LimiX](https://github.com/limix-ldm/LimiX), [TabDPT](https://github.com/layer6ai-labs/TabDPT-inference), and [SAINT](https://github.com/somepago/saint). It also includes a RotatE baseline via [PyKEEN](https://github.com/pykeen/pykeen). We turn triples (head, relation, tail) into a binary classification problem over corrupted triples and evaluate with filtered ranking metrics (MRR/MR/Hits@K). Experiments default to the full FB15k-237 splits, but you can cap them for quick local smoke tests.
+This repo hosts a small benchmark that compares multiple tabular foundation models on the FB15k-237 knowledge graph link-prediction task: [TabICL](https://github.com/yandex-research/tabicl), [TabPFN](https://github.com/automl/TabPFN), [LimiX](https://github.com/limix-ldm/LimiX), [TabDPT](https://github.com/layer6ai-labs/TabDPT-inference), and [SAINT](https://github.com/somepago/saint). It also includes RotatE and ComplEx baselines via [PyKEEN](https://github.com/pykeen/pykeen). We turn triples (head, relation, tail) into a binary classification problem over corrupted triples and evaluate with filtered ranking metrics (MRR/MR/Hits@K). Experiments default to the full FB15k-237 splits, but you can cap them for quick local smoke tests.
 
 For non-tabular baselines, KG-BERT is included as a binary text classifier over triples.
 
@@ -55,7 +55,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 
 Key arguments:
 
-- `--model {tabicl, tabpfn, limix, tabdpt, saint, kgbert, rotatee}` (default: `tabicl`).
+- `--model {tabicl, tabpfn, limix, tabdpt, saint, kgbert, rotatee, complex}` (default: `tabicl`).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
 - `--max-samples` to apply a single cap to train/valid/test for quick debugging.
@@ -69,7 +69,7 @@ Key arguments:
 Under the hood `src/run.py` orchestrates the following pipeline:
 
 1. `src/data.py.prepare_data` loads FB15k-237 via Hugging Face, resolves the triple columns (falling back to parsing tab-separated text when needed), and optionally subsamples each split. It then adds negative samples by corrupting head or tail (50/50 by default) and returns `(X_train, y_train, X_valid, y_valid, X_test, y_test)` where `X_*` contains `head`, `relation`, and `tail` columns (dtype `object`) and `y_*` is a binary label (`1` = true triple, `0` = corrupted).
-2. `src/model.py` instantiates the requested model (TabICL, TabPFN, LimiX, TabDPT, or SAINT).
+2. `src/model.py` instantiates the requested model (TabICL, TabPFN, LimiX, TabDPT, SAINT, KG-BERT, RotatE, or ComplEx).
 3. `src/metrics.py` computes filtered ranking metrics (MRR, MR, Hits@k) by scoring candidate tails with the binary classifier.
 
 Example output snippet:
@@ -150,6 +150,16 @@ Example:
 
 ```bash
 uv run python main.py --model rotatee --rotatee-epochs 100 --rotatee-dim 200 --rotatee-batchsize 1024
+```
+
+## ComplEx (PyKEEN) baseline
+
+ComplEx runs through PyKEEN with the same binary scoring and filtered ranking evaluation.
+
+Example:
+
+```bash
+uv run python main.py --model complex --complex-epochs 100 --complex-dim 200 --complex-batchsize 1024
 ```
 
 ## LimiX integration (optional)

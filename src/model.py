@@ -711,3 +711,107 @@ def build_rotatee(
         device=device,
         seed=seed,
     )
+
+
+class ComplExBinaryClassifier:
+    """Binary classifier wrapper using ComplEx scores."""
+
+    def __init__(
+        self,
+        embedding_dim: int = 200,
+        epochs: int = 100,
+        batchsize: int = 1024,
+        lr: float = 1e-3,
+        device: Optional[str] = None,
+        seed: int = 42,
+    ) -> None:
+        import numpy as np
+        import torch
+
+        self._np = np
+        self._torch = torch
+        self._embedding_dim = embedding_dim
+        self._epochs = epochs
+        self._batchsize = batchsize
+        self._lr = lr
+        self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self._seed = seed
+        self.classes_ = np.array([0, 1])
+        self._model = None
+        self._entity_to_id = {}
+        self._relation_to_id = {}
+
+    def fit(self, X, y) -> "ComplExBinaryClassifier":
+        from pykeen.pipeline import pipeline
+        from pykeen.triples import TriplesFactory
+
+        X_pos = X[y == 1]
+        triples = X_pos[["head", "relation", "tail"]].to_numpy(dtype=str)
+        train_tf = TriplesFactory.from_labeled_triples(triples)
+
+        result = pipeline(
+            training=train_tf,
+            testing=train_tf,
+            model="ComplEx",
+            model_kwargs={"embedding_dim": self._embedding_dim},
+            training_kwargs={"num_epochs": self._epochs, "batch_size": self._batchsize},
+            optimizer_kwargs={"lr": self._lr},
+            training_loop="sLCWA",
+            device=str(self._device),
+            random_seed=self._seed,
+        )
+
+        self._model = result.model
+        self._entity_to_id = train_tf.entity_to_id
+        self._relation_to_id = train_tf.relation_to_id
+        return self
+
+    def predict_proba(self, X):
+        if self._model is None:
+            raise ValueError("ComplExBinaryClassifier must be fit before predict_proba.")
+        torch = self._torch
+
+        heads = X["head"].map(self._entity_to_id.get).to_numpy()
+        rels = X["relation"].map(self._relation_to_id.get).to_numpy()
+        tails = X["tail"].map(self._entity_to_id.get).to_numpy()
+        known_mask = (heads != None) & (rels != None) & (tails != None)
+
+        scores = self._np.full(len(X), -1e9, dtype=self._np.float32)
+        if known_mask.any():
+            hrt = torch.tensor(
+                self._np.stack(
+                    [
+                        heads[known_mask].astype(self._np.int64),
+                        rels[known_mask].astype(self._np.int64),
+                        tails[known_mask].astype(self._np.int64),
+                    ],
+                    axis=1,
+                ),
+                device=self._device,
+            )
+            with torch.no_grad():
+                batch_scores = self._model.score_hrt(hrt).cpu().numpy()
+            scores[known_mask] = batch_scores.reshape(-1)
+
+        probs = 1.0 / (1.0 + self._np.exp(-scores))
+        return self._np.stack([1.0 - probs, probs], axis=1)
+
+
+def build_complex(
+    embedding_dim: int = 200,
+    epochs: int = 100,
+    batchsize: int = 1024,
+    lr: float = 1e-3,
+    device: Optional[str] = None,
+    seed: int = 42,
+) -> ComplExBinaryClassifier:
+    """Build a ComplEx wrapper classifier."""
+
+    return ComplExBinaryClassifier(
+        embedding_dim=embedding_dim,
+        epochs=epochs,
+        batchsize=batchsize,
+        lr=lr,
+        device=device,
+        seed=seed,
+    )
