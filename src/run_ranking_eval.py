@@ -56,6 +56,8 @@ def load_model(args: argparse.Namespace):
         return module.build_kgbert(device=None if args.device == "auto" else args.device)
     if args.model == "rotatee":
         return module.build_rotatee(device=None if args.device == "auto" else args.device)
+    if args.model == "complex":
+        return module.build_complex(device=None if args.device == "auto" else args.device)
     raise ValueError(f"Unknown model: {args.model}")
 
 
