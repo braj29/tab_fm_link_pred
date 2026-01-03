@@ -10,7 +10,7 @@ metadata:
   labels: &id002
     eidf/user: pminervini
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
-  generateName: raj-tabdpt-1000-
+  generateName: raj-tabdpt-full-
   namespace: eidf097ns
 spec:
   backoffLimit: 4
@@ -58,7 +58,7 @@ spec:
               /root/.local/bin/uv pip install faiss-cpu
               echo "Step 7: run experiment"
               cd /workspace/tab_fm_link_pred
-              /root/.local/bin/uv run python -u main.py --model tabdpt --max-train 1000 --max-valid 500 --max-test 500 --output /workspace/tab_fm_link_pred/experiment_metrics_tabdpt_1000.json
+              /root/.local/bin/uv run python -u main.py --model tabdpt --output /workspace/tab_fm_link_pred/experiment_metrics_tabdpt_full.json
           resources:
             limits:
               cpu: 1

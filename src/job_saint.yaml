@@ -10,7 +10,7 @@ metadata:
   labels: &id002
     eidf/user: pminervini
     kueue.x-k8s.io/queue-name: eidf097ns-user-queue
-  generateName: raj-saint-1000-
+  generateName: raj-saint-full-
   namespace: eidf097ns
 spec:
   backoffLimit: 4
@@ -55,7 +55,7 @@ spec:
               echo "Step 6: install SAINT deps"
               /root/.local/bin/uv pip install torch torchvision numpy pandas scikit-learn einops
               echo "Step 7: run experiment"
-              /root/.local/bin/uv run python -u main.py --model saint --saint-path /workspace/saint --max-train 1000 --max-valid 500 --max-test 500 --output /workspace/tab_fm_link_pred/experiment_metrics_saint_1000.json
+              /root/.local/bin/uv run python -u main.py --model saint --saint-path /workspace/saint --output /workspace/tab_fm_link_pred/experiment_metrics_saint_full.json
           resources:
             limits:
               cpu: 1
