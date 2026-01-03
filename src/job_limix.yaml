@@ -20,7 +20,7 @@ spec:
       labels: *id002
     spec:
       containers:
-        - name: raj-limix-
+        - name: raj-limix-full
           image: ubuntu:22.04
           env:
             - name: PYTHONUNBUFFERED
