@@ -16,7 +16,7 @@ SRC_DIR = Path(__file__).resolve().parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from data import prepare_data
+from data import load_splits, prepare_data
 from metrics import binary_classification_metrics, filtered_ranking_metrics_binary
 
 _model_path = SRC_DIR / "model.py"
@@ -50,6 +50,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "kgbert",
             "rotatee",
             "complex",
+            "complex-kge",
         ],
     )
     parser.add_argument("--device", type=str, default="auto")
@@ -289,6 +290,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="ComplEx training epochs (PyKEEN).",
     )
     parser.add_argument(
+        "--complex-lr",
+        type=float,
+        default=1e-3,
+        help="ComplEx learning rate (PyKEEN).",
+    )
+    parser.add_argument(
         "--complex-dim",
         type=int,
         default=200,
@@ -301,12 +308,146 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="ComplEx batch size (PyKEEN).",
     )
     parser.add_argument(
+        "--complex-eval-batchsize",
+        type=int,
+        default=512,
+        help="ComplEx evaluation batch size (PyKEEN rank-based evaluator).",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
         help="Path to write metrics JSON.",
     )
     return parser.parse_args(argv)
+
+
+def _metric_results_to_dict(results) -> dict:
+    if hasattr(results, "to_dict"):
+        return results.to_dict()
+    return dict(results)
+
+
+def _run_complex_kge(args: argparse.Namespace, start: float) -> None:
+    import torch
+    from pykeen.evaluation import RankBasedEvaluator
+    from pykeen.pipeline import pipeline
+    from pykeen.triples import TriplesFactory
+
+    print("=== Loading data (KGE) ===")
+    max_train = args.max_train if args.max_train is not None else args.max_samples
+    max_valid = args.max_valid if args.max_valid is not None else args.max_samples
+    max_test = args.max_test if args.max_test is not None else args.max_samples
+    train_df, valid_df, test_df = load_splits(
+        max_train=max_train,
+        max_valid=max_valid,
+        max_test=max_test,
+    )
+
+    train_entities = set(train_df["head"]).union(train_df["tail"])
+    valid_entities = set(valid_df["head"]).union(valid_df["tail"])
+    test_entities = set(test_df["head"]).union(test_df["tail"])
+    all_entities = train_entities.union(valid_entities).union(test_entities)
+    all_relations = set(train_df["relation"]).union(valid_df["relation"]).union(test_df["relation"])
+
+    print("=== Dataset stats ===")
+    print(
+        f"Entities: {len(all_entities)} | Relations: {len(all_relations)} | "
+        f"Train: {len(train_df)} | Valid: {len(valid_df)} | Test: {len(test_df)}"
+    )
+    print(f"Entities in valid not in train: {len(valid_entities - train_entities)}")
+    print(f"Entities in test not in train: {len(test_entities - train_entities)}")
+
+    if (valid_entities - train_entities) or (test_entities - train_entities):
+        if args.no_filter_unseen:
+            print("=== Warning: KGE requires entities seen in train; filtering unseen entities anyway ===")
+        else:
+            print("=== KGE requires entities seen in train; filtering unseen entities ===")
+        before_valid = len(valid_df)
+        before_test = len(test_df)
+        valid_df = valid_df[
+            valid_df["head"].isin(train_entities) & valid_df["tail"].isin(train_entities)
+        ]
+        test_df = test_df[
+            test_df["head"].isin(train_entities) & test_df["tail"].isin(train_entities)
+        ]
+        print(f"=== Filtered {before_valid - len(valid_df)} valid triples with unseen entities ===")
+        print(f"=== Filtered {before_test - len(test_df)} test triples with unseen entities ===")
+
+    train_triples = train_df[["head", "relation", "tail"]].to_numpy(dtype=str)
+    valid_triples = valid_df[["head", "relation", "tail"]].to_numpy(dtype=str)
+    test_triples = test_df[["head", "relation", "tail"]].to_numpy(dtype=str)
+
+    train_tf = TriplesFactory.from_labeled_triples(train_triples)
+    valid_tf = TriplesFactory.from_labeled_triples(
+        valid_triples,
+        entity_to_id=train_tf.entity_to_id,
+        relation_to_id=train_tf.relation_to_id,
+    )
+    test_tf = TriplesFactory.from_labeled_triples(
+        test_triples,
+        entity_to_id=train_tf.entity_to_id,
+        relation_to_id=train_tf.relation_to_id,
+    )
+
+    if args.device == "auto":
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(args.device)
+
+    print("=== Training ComplEx (KGE) ===")
+    result = pipeline(
+        training=train_tf,
+        validation=valid_tf,
+        testing=test_tf,
+        model="ComplEx",
+        model_kwargs={"embedding_dim": args.complex_dim},
+        training_kwargs={"num_epochs": args.complex_epochs, "batch_size": args.complex_batchsize},
+        optimizer_kwargs={"lr": args.complex_lr},
+        training_loop="sLCWA",
+        device=str(device),
+        random_seed=42,
+    )
+
+    evaluator = RankBasedEvaluator(filtered=True)
+    print("=== Validation ranking metrics (ComplEx) ===")
+    val_results = evaluator.evaluate(
+        model=result.model,
+        mapped_triples=valid_tf.mapped_triples,
+        additional_filter_triples=[train_tf.mapped_triples],
+        batch_size=args.complex_eval_batchsize,
+        device=device,
+    )
+    val_metrics = _metric_results_to_dict(val_results)
+    print(val_metrics)
+
+    print("=== Test ranking metrics (ComplEx) ===")
+    test_results = evaluator.evaluate(
+        model=result.model,
+        mapped_triples=test_tf.mapped_triples,
+        additional_filter_triples=[train_tf.mapped_triples, valid_tf.mapped_triples],
+        batch_size=args.complex_eval_batchsize,
+        device=device,
+    )
+    test_metrics = _metric_results_to_dict(test_results)
+    print(test_metrics)
+
+    metrics = {
+        "model": "complex-kge",
+        "device": args.device,
+        "max_train": max_train,
+        "max_valid": max_valid,
+        "max_test": max_test,
+        "val_link_prediction": val_metrics,
+        "test_link_prediction": test_metrics,
+        "elapsed_seconds": round(time.time() - start, 2),
+    }
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(metrics, indent=2))
+    print(f"=== Wrote metrics to {output_path} ===")
+    print("=== Metrics summary ===")
+    print(json.dumps(metrics, indent=2))
 
 
 def run_experiment(args: argparse.Namespace) -> None:
@@ -319,6 +460,10 @@ def run_experiment(args: argparse.Namespace) -> None:
     )
 
     try:
+        if args.model == "complex-kge":
+            _run_complex_kge(args, start)
+            return
+
         print("=== Loading data (small experiment) ===")
         max_train = args.max_train if args.max_train is not None else args.max_samples
         max_valid = args.max_valid if args.max_valid is not None else args.max_samples
@@ -413,7 +558,7 @@ def run_experiment(args: argparse.Namespace) -> None:
                 epochs=args.complex_epochs,
                 batchsize=args.complex_batchsize,
                 device=None if args.device == "auto" else args.device,
-                lr=1e-3,
+                lr=args.complex_lr,
                 seed=42,
             )
         else:

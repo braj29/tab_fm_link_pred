@@ -55,7 +55,7 @@ PYTHONPATH=src python main.py --model tabicl --max-train 2000 --max-valid 500 --
 
 Key arguments:
 
-- `--model {tabicl, tabpfn, limix, tabdpt, saint, kgbert, rotatee, complex}` (default: `tabicl`).
+- `--model {tabicl, tabpfn, limix, tabdpt, saint, kgbert, rotatee, complex, complex-kge}` (default: `tabicl`).
 - `--device {auto,cpu,cuda}` (TabPFN only; forwarded to `TabPFNClassifier`).
 - `--max-train/--max-valid/--max-test` to optionally subsample each split (defaults: `None`, meaning full data).
 - `--max-samples` to apply a single cap to train/valid/test for quick debugging.
@@ -154,12 +154,20 @@ uv run python main.py --model rotatee --rotatee-epochs 100 --rotatee-dim 200 --r
 
 ## ComplEx (PyKEEN) baseline
 
-ComplEx runs through PyKEEN with the same binary scoring and filtered ranking evaluation.
+ComplEx can run in two modes:
+
+- `--model complex` uses the binary triple-scoring wrapper (same pipeline as the tabular models).
+- `--model complex-kge` trains/evaluates ComplEx as a standard KGE model using PyKEEN's
+  rank-based evaluator.
 
 Example:
 
 ```bash
 uv run python main.py --model complex --complex-epochs 100 --complex-dim 200 --complex-batchsize 1024
+```
+
+```bash
+uv run python main.py --model complex-kge --complex-epochs 100 --complex-dim 200 --complex-batchsize 1024
 ```
 
 ## LimiX integration (optional)
