@@ -141,6 +141,245 @@ class LimiXBinaryClassifier:
         return self._predictor.predict(self._x_train, self._y_train, X_enc)
 
 
+class TAGBinaryClassifier:
+    """TAG-style wrapper using TabICL/TabPFN on tabular triples."""
+
+    def __init__(
+        self,
+        tag_path: Optional[str] = None,
+        base_model: Literal["tabicl", "tabpfn"] = "tabicl",
+        device: Optional[str] = None,
+        max_train_rows: int = 10000,
+        max_cells_per_batch: int = 5_000_000,
+        seed: int = 42,
+    ) -> None:
+        import numpy as np
+        import pandas as pd
+
+        if tag_path:
+            tag_path = os.path.abspath(tag_path)
+            tag_src = os.path.join(tag_path, "src")
+            if tag_src not in sys.path:
+                sys.path.insert(0, tag_src)
+
+        try:
+            from tag.ensemble_config import FeatureSubset
+            from tag.ensemble_models import BatchedInferenceClassifier, RandomFeatureSubsetRandomRowClassifier
+        except ImportError as exc:
+            raise ImportError(
+                "TAG is not installed or not on PYTHONPATH. Point --tag-path to the repo."
+            ) from exc
+
+        self._np = np
+        self._pd = pd
+        self._FeatureSubset = FeatureSubset
+        self._BatchedInferenceClassifier = BatchedInferenceClassifier
+        self._RandomFeatureSubsetRandomRowClassifier = RandomFeatureSubsetRandomRowClassifier
+        self._base_model = base_model
+        self._device = device
+        self._max_train_rows = max_train_rows
+        self._max_cells_per_batch = max_cells_per_batch
+        self._seed = seed
+        self._columns: list[str] = []
+        self._categories: dict[str, list[str]] = {}
+        self._clf = None
+        self.classes_ = np.array([0, 1])
+
+    def _encode(self, X) -> "np.ndarray":
+        pd = self._pd
+        np = self._np
+        if not self._columns:
+            raise ValueError("TAGBinaryClassifier must be fit before calling predict.")
+        cols = []
+        for col in self._columns:
+            categories = self._categories[col]
+            values = X[col].where(X[col].isin(categories), "__UNK__")
+            cat = pd.Categorical(values, categories=categories)
+            cols.append(cat.codes.astype(np.int64))
+        return np.stack(cols, axis=1)
+
+    def _build_base_model(self):
+        if self._base_model == "tabicl":
+            return TabICLClassifier(
+                n_estimators=16,
+                use_hierarchical=True,
+                checkpoint_version="tabicl-classifier-v1.1-0506.ckpt",
+                verbose=True,
+            )
+        if self._base_model == "tabpfn":
+            return TabPFNClassifier(
+                n_estimators=16,
+                device=self._device or "auto",
+            )
+        raise ValueError(f"Unsupported TAG base model: {self._base_model}")
+
+    def fit(self, X, y) -> "TAGBinaryClassifier":
+        pd = self._pd
+        self._columns = list(X.columns)
+        self._categories = {
+            col: pd.Categorical(X[col]).categories.tolist() + ["__UNK__"]
+            for col in self._columns
+        }
+        X_enc = self._encode(X)
+        y_enc = self._np.asarray(y, dtype=self._np.int64)
+
+        base = self._build_base_model()
+        batched = self._BatchedInferenceClassifier(
+            base_classifier=base,
+            max_num_of_cells_per_batch=self._max_cells_per_batch,
+        )
+
+        n_features = X_enc.shape[1]
+        partition_dict = {"X": self._np.arange(n_features)}
+        feature_subsets = [self._FeatureSubset(features=["X"], num_columns=n_features)]
+        n_rows = min(self._max_train_rows, X_enc.shape[0])
+        self._clf = self._RandomFeatureSubsetRandomRowClassifier(
+            base_classifier=batched,
+            partition_dict=partition_dict,
+            feature_subsets_list=feature_subsets,
+            random_state=self._seed,
+            n_sample_rows=n_rows,
+        )
+        self._clf.fit(X_enc, y_enc)
+        return self
+
+    def predict_proba(self, X):
+        if self._clf is None:
+            raise ValueError("TAGBinaryClassifier must be fit before predict_proba.")
+        X_enc = self._encode(X)
+        probs = self._clf.predict_proba(X_enc)
+        if probs.shape[1] == 1:
+            return self._np.hstack([1.0 - probs, probs])
+        return probs
+
+
+class TAGGraphBinaryClassifier:
+    """TAG graph-feature wrapper for FB15k-237 link prediction."""
+
+    def __init__(
+        self,
+        tag_path: Optional[str] = None,
+        base_model: Literal["tabicl", "tabpfn"] = "tabicl",
+        device: Optional[str] = None,
+        node_feature_dim: int = 64,
+        relation_feature_dim: int = 16,
+        n_hops: int = 4,
+        feature_names: Sequence[str] = ("X", "L1", "L2", "L3", "L4", "RW20", "LE20"),
+        include_gpse: bool = False,
+        max_train_rows: int = 10000,
+        max_cells_per_batch: int = 5_000_000,
+        seed: int = 42,
+    ) -> None:
+        import numpy as np
+
+        if tag_path:
+            tag_path = os.path.abspath(tag_path)
+            tag_src = os.path.join(tag_path, "src")
+            if tag_src not in sys.path:
+                sys.path.insert(0, tag_src)
+
+        try:
+            from tag.ensemble_config import FeatureSubset
+            from tag.ensemble_models import BatchedInferenceClassifier, RandomFeatureSubsetRandomRowClassifier
+        except ImportError as exc:
+            raise ImportError(
+                "TAG is not installed or not on PYTHONPATH. Point --tag-path to the repo."
+            ) from exc
+
+        self._np = np
+        self._FeatureSubset = FeatureSubset
+        self._BatchedInferenceClassifier = BatchedInferenceClassifier
+        self._RandomFeatureSubsetRandomRowClassifier = RandomFeatureSubsetRandomRowClassifier
+        self._base_model = base_model
+        self._device = device
+        self._node_feature_dim = node_feature_dim
+        self._relation_feature_dim = relation_feature_dim
+        self._n_hops = n_hops
+        self._feature_names = list(feature_names)
+        self._include_gpse = include_gpse
+        self._max_train_rows = max_train_rows
+        self._max_cells_per_batch = max_cells_per_batch
+        self._seed = seed
+        self._clf = None
+        self._entity_to_id: dict[str, int] = {}
+        self._node_features: dict[str, "np.ndarray"] = {}
+        self.classes_ = np.array([0, 1])
+
+    def _build_base_model(self):
+        if self._base_model == "tabicl":
+            return TabICLClassifier(
+                n_estimators=16,
+                use_hierarchical=True,
+                checkpoint_version="tabicl-classifier-v1.1-0506.ckpt",
+                verbose=True,
+            )
+        if self._base_model == "tabpfn":
+            return TabPFNClassifier(
+                n_estimators=16,
+                device=self._device or "auto",
+            )
+        raise ValueError(f"Unsupported TAG base model: {self._base_model}")
+
+    def _build_features(self, X) -> "np.ndarray":
+        from tag_graph import build_triple_features
+
+        triples = list(zip(X["head"], X["relation"], X["tail"], strict=False))
+        return build_triple_features(
+            triples,
+            self._node_features,
+            self._entity_to_id,
+            relation_dim=self._relation_feature_dim,
+            seed=self._seed,
+        )
+
+    def fit(self, X, y) -> "TAGGraphBinaryClassifier":
+        from tag_graph import build_tag_graph_features
+
+        train_triples = list(zip(X["head"], X["relation"], X["tail"], strict=False))
+        features = build_tag_graph_features(
+            train_triples=train_triples,
+            node_feature_dim=self._node_feature_dim,
+            n_hops=self._n_hops,
+            feature_names=self._feature_names,
+            seed=self._seed,
+            include_gpse=self._include_gpse,
+        )
+        self._entity_to_id = features.entity_to_id
+        self._node_features = features.node_features
+
+        X_enc = self._build_features(X)
+        y_enc = self._np.asarray(y, dtype=self._np.int64)
+
+        base = self._build_base_model()
+        batched = self._BatchedInferenceClassifier(
+            base_classifier=base,
+            max_num_of_cells_per_batch=self._max_cells_per_batch,
+        )
+
+        n_features = X_enc.shape[1]
+        partition_dict = {"X": self._np.arange(n_features)}
+        feature_subsets = [self._FeatureSubset(features=["X"], num_columns=n_features)]
+        n_rows = min(self._max_train_rows, X_enc.shape[0])
+        self._clf = self._RandomFeatureSubsetRandomRowClassifier(
+            base_classifier=batched,
+            partition_dict=partition_dict,
+            feature_subsets_list=feature_subsets,
+            random_state=self._seed,
+            n_sample_rows=n_rows,
+        )
+        self._clf.fit(X_enc, y_enc)
+        return self
+
+    def predict_proba(self, X):
+        if self._clf is None:
+            raise ValueError("TAGGraphBinaryClassifier must be fit before predict_proba.")
+        X_enc = self._build_features(X)
+        probs = self._clf.predict_proba(X_enc)
+        if probs.shape[1] == 1:
+            return self._np.hstack([1.0 - probs, probs])
+        return probs
+
+
 class TabDPTBinaryClassifier:
     """Lightweight wrapper to use TabDPT as a binary classifier."""
 
@@ -429,6 +668,56 @@ def build_limix(
         model_file=model_file,
         cache_dir=cache_dir,
         inference_config=inference_config,
+    )
+
+
+def build_tag(
+    tag_path: Optional[str] = None,
+    base_model: Literal["tabicl", "tabpfn"] = "tabicl",
+    device: Optional[str] = None,
+    max_train_rows: int = 10000,
+    max_cells_per_batch: int = 5_000_000,
+    seed: int = 42,
+) -> TAGBinaryClassifier:
+    """Build a TAG wrapper classifier."""
+
+    return TAGBinaryClassifier(
+        tag_path=tag_path,
+        base_model=base_model,
+        device=device,
+        max_train_rows=max_train_rows,
+        max_cells_per_batch=max_cells_per_batch,
+        seed=seed,
+    )
+
+
+def build_tag_graph(
+    tag_path: Optional[str] = None,
+    base_model: Literal["tabicl", "tabpfn"] = "tabicl",
+    device: Optional[str] = None,
+    node_feature_dim: int = 64,
+    relation_feature_dim: int = 16,
+    n_hops: int = 4,
+    feature_names: Sequence[str] = ("X", "L1", "L2", "L3", "L4", "RW20", "LE20"),
+    include_gpse: bool = False,
+    max_train_rows: int = 10000,
+    max_cells_per_batch: int = 5_000_000,
+    seed: int = 42,
+) -> TAGGraphBinaryClassifier:
+    """Build a TAG graph-feature wrapper classifier."""
+
+    return TAGGraphBinaryClassifier(
+        tag_path=tag_path,
+        base_model=base_model,
+        device=device,
+        node_feature_dim=node_feature_dim,
+        relation_feature_dim=relation_feature_dim,
+        n_hops=n_hops,
+        feature_names=feature_names,
+        include_gpse=include_gpse,
+        max_train_rows=max_train_rows,
+        max_cells_per_batch=max_cells_per_batch,
+        seed=seed,
     )
 
 

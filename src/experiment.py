@@ -33,6 +33,8 @@ build_saint = _model_module.build_saint
 build_kgbert = _model_module.build_kgbert
 build_rotatee = _model_module.build_rotatee
 build_complex = _model_module.build_complex
+build_tag = _model_module.build_tag
+build_tag_graph = _model_module.build_tag_graph
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -51,6 +53,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "rotatee",
             "complex",
             "complex-kge",
+            "tag",
+            "tag-graph",
         ],
     )
     parser.add_argument("--device", type=str, default="auto")
@@ -314,6 +318,60 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="ComplEx evaluation batch size (PyKEEN rank-based evaluator).",
     )
     parser.add_argument(
+        "--tag-path",
+        type=str,
+        default=None,
+        help="Path to local TAG repo (adds to PYTHONPATH).",
+    )
+    parser.add_argument(
+        "--tag-base-model",
+        type=str,
+        default="tabicl",
+        choices=["tabicl", "tabpfn"],
+        help="Base model used inside TAG wrapper.",
+    )
+    parser.add_argument(
+        "--tag-max-train-rows",
+        type=int,
+        default=10000,
+        help="Max rows sampled by TAG wrapper for in-context training.",
+    )
+    parser.add_argument(
+        "--tag-max-cells-per-batch",
+        type=int,
+        default=5_000_000,
+        help="Max cells per inference batch for TAG wrapper.",
+    )
+    parser.add_argument(
+        "--tag-graph-node-dim",
+        type=int,
+        default=64,
+        help="Node feature dimension for TAG graph pipeline.",
+    )
+    parser.add_argument(
+        "--tag-graph-relation-dim",
+        type=int,
+        default=16,
+        help="Relation feature dimension for TAG graph pipeline.",
+    )
+    parser.add_argument(
+        "--tag-graph-hops",
+        type=int,
+        default=4,
+        help="Number of hops for TAG low-pass graph features.",
+    )
+    parser.add_argument(
+        "--tag-graph-features",
+        type=str,
+        default="X,L1,L2,L3,L4,RW20,LE20",
+        help="Comma-separated TAG graph features to include.",
+    )
+    parser.add_argument(
+        "--tag-graph-gpse",
+        action="store_true",
+        help="Enable GPSE features for TAG graph pipeline.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="experiment_metrics.json",
@@ -559,6 +617,32 @@ def run_experiment(args: argparse.Namespace) -> None:
                 batchsize=args.complex_batchsize,
                 device=None if args.device == "auto" else args.device,
                 lr=args.complex_lr,
+                seed=42,
+            )
+        elif args.model == "tag":
+            print("=== Building TAG ===")
+            clf = build_tag(
+                tag_path=args.tag_path,
+                base_model=args.tag_base_model,
+                device=None if args.device == "auto" else args.device,
+                max_train_rows=args.tag_max_train_rows,
+                max_cells_per_batch=args.tag_max_cells_per_batch,
+                seed=42,
+            )
+        elif args.model == "tag-graph":
+            print("=== Building TAG (graph features) ===")
+            feature_list = [f.strip() for f in args.tag_graph_features.split(",") if f.strip()]
+            clf = build_tag_graph(
+                tag_path=args.tag_path,
+                base_model=args.tag_base_model,
+                device=None if args.device == "auto" else args.device,
+                node_feature_dim=args.tag_graph_node_dim,
+                relation_feature_dim=args.tag_graph_relation_dim,
+                n_hops=args.tag_graph_hops,
+                feature_names=feature_list,
+                include_gpse=args.tag_graph_gpse,
+                max_train_rows=args.tag_max_train_rows,
+                max_cells_per_batch=args.tag_max_cells_per_batch,
                 seed=42,
             )
         else:
