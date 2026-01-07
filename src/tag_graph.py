@@ -78,10 +78,11 @@ def _compute_gpse_features(g, input_feats):
 
 def _dgl_to_pyg(g, input_feats):
     from torch_geometric.utils import from_dgl
+    import torch
 
     g_pyg = from_dgl(g)
     g_pyg.x = input_feats
-    g_pyg.edge_index = g_pyg.edge_index.to(np.int64)
+    g_pyg.edge_index = g_pyg.edge_index.to(torch.int64)
     return g_pyg
 
 
