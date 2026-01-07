@@ -54,7 +54,7 @@ spec:
               /root/.local/bin/uv sync --frozen
               /root/.local/bin/uv pip install huggingface_hub torch torchvision torchaudio scikit-learn einops matplotlib networkx numpy pandas scipy tqdm typing_extensions xgboost kditransform hyperopt
               echo "Step 7: run experiment"
-              /root/.local/bin/uv run python -u main.py --model limix --max-train 5000 --max-valid 1000 --max-test 1000 --limix-path /workspace/LimiX --limix-config /workspace/tab_fm_link_pred/src/limix_config_noquantile.json --output /workspace/tab_fm_link_pred/experiment_metrics_limix_full.json
+              /root/.local/bin/uv run python -u main.py --model limix --limix-path /workspace/LimiX --limix-config /workspace/tab_fm_link_pred/src/limix_config_noquantile.json --output /workspace/tab_fm_link_pred/experiment_metrics_limix_full.json
           resources:
             limits:
               cpu: 1
