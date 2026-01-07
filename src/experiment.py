@@ -110,9 +110,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Probability of corrupting head when sampling negatives.",
     )
     parser.add_argument(
-        "--classification-metrics",
-        action="store_true",
-        help="Also compute binary classification metrics (accuracy/F1/ROC-AUC).",
+        "--no-classification-metrics",
+        action="store_false",
+        dest="classification_metrics",
+        help="Disable binary classification metrics (accuracy/F1/ROC-AUC).",
     )
     parser.add_argument(
         "--classification-threshold",
@@ -120,6 +121,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.5,
         help="Threshold for binary classification metrics.",
     )
+    parser.set_defaults(classification_metrics=True)
     parser.add_argument(
         "--limix-model-id",
         type=str,
