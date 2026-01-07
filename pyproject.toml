@@ -17,6 +17,7 @@ dependencies = [
     "faiss-cpu>=1.13.2",
     "openml>=0.15.1",
     "pykeen>=1.11.1",
+    "matplotlib>=3.10.8",
 ]
 
 [tool.uv]
