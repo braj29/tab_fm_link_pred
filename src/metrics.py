@@ -69,6 +69,7 @@ def filtered_ranking_metrics_binary(
     positives: pd.DataFrame,
     hits_ks: Sequence[int] = (1, 3, 10),
     predict: str = "tail",
+    show_progress: bool = True,
 ) -> Mapping[str, float]:
     """Compute filtered MRR/MR/Hits@k for binary link prediction.
 
@@ -99,7 +100,16 @@ def filtered_ranking_metrics_binary(
     ranks = []
     hits = {k: 0 for k in hits_ks}
 
-    for head, relation, tail in triples.itertuples(index=False, name=None):
+    iterator = triples.itertuples(index=False, name=None)
+    if show_progress:
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            tqdm = None
+        if tqdm is not None:
+            iterator = tqdm(iterator, total=len(triples), desc=f"ranking/{predict}")
+
+    for head, relation, tail in iterator:
         if predict == "tail":
             candidates = pd.DataFrame({
                 "head": [head] * len(candidate_entities),

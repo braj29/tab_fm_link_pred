@@ -147,6 +147,7 @@ def _negative_sample_split(
     hard_negatives: bool = False,
     corrupt_head_prob: float = 0.5,
     max_tries: int = 50,
+    show_progress: bool = True,
 ) -> pd.DataFrame:
     rng = random.Random(seed)
     negatives: List[Tuple[str, str, str]] = []
@@ -154,7 +155,16 @@ def _negative_sample_split(
     skipped = 0
     warned = False
 
-    for head, relation, tail in df.itertuples(index=False, name=None):
+    iterator = df.itertuples(index=False, name=None)
+    if show_progress:
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            tqdm = None
+        if tqdm is not None:
+            iterator = tqdm(iterator, total=len(df), desc=f"negatives/{split_name}")
+
+    for head, relation, tail in iterator:
         for _ in range(n_neg_per_pos):
             found = False
             corrupt_head = rng.random() < corrupt_head_prob
@@ -228,6 +238,7 @@ def prepare_data(
     hard_negatives: bool = False,
     corrupt_head_prob: float = 0.5,
     seed: int = 42,
+    show_progress: bool = True,
 ) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Load, optionally subsample, and split FB15k-237 into binary features/labels."""
 
@@ -277,6 +288,7 @@ def prepare_data(
         relation_head_pool=relation_head_pool,
         hard_negatives=hard_negatives,
         corrupt_head_prob=corrupt_head_prob,
+        show_progress=show_progress,
     )
     valid_neg = _negative_sample_split(
         valid,
@@ -289,6 +301,7 @@ def prepare_data(
         relation_head_pool=relation_head_pool,
         hard_negatives=hard_negatives,
         corrupt_head_prob=corrupt_head_prob,
+        show_progress=show_progress,
     )
     test_neg = _negative_sample_split(
         test,
@@ -301,6 +314,7 @@ def prepare_data(
         relation_head_pool=relation_head_pool,
         hard_negatives=hard_negatives,
         corrupt_head_prob=corrupt_head_prob,
+        show_progress=show_progress,
     )
 
     train_labeled = pd.concat([train_pos, train_neg], ignore_index=True)
