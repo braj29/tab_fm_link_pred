@@ -121,6 +121,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.5,
         help="Threshold for binary classification metrics.",
     )
+    parser.add_argument(
+        "--ranking-batchsize",
+        type=int,
+        default=512,
+        help="Batch size for ranking evaluation candidate scoring.",
+    )
     parser.set_defaults(classification_metrics=True)
     parser.add_argument(
         "--limix-model-id",
@@ -320,6 +326,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="ComplEx evaluation batch size (PyKEEN rank-based evaluator).",
     )
     parser.add_argument(
+        "--complex-eval-slice-size",
+        type=int,
+        default=None,
+        help="ComplEx evaluation slice size (PyKEEN rank-based evaluator).",
+    )
+    parser.add_argument(
+        "--complex-eval-device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda"],
+        help="Device for ComplEx evaluation (can use CPU to avoid CUDA allocator errors).",
+    )
+    parser.add_argument(
         "--tag-path",
         type=str,
         default=None,
@@ -470,13 +489,19 @@ def _run_complex_kge(args: argparse.Namespace, start: float) -> None:
     )
 
     evaluator = RankBasedEvaluator(filtered=True)
+    eval_device = device
+    if args.complex_eval_device != "auto":
+        eval_device = torch.device(args.complex_eval_device)
+    if eval_device != device:
+        result.model.to(eval_device)
     print("=== Validation ranking metrics (ComplEx) ===")
     val_results = evaluator.evaluate(
         model=result.model,
         mapped_triples=valid_tf.mapped_triples,
         additional_filter_triples=[train_tf.mapped_triples],
         batch_size=args.complex_eval_batchsize,
-        device=device,
+        device=eval_device,
+        slice_size=args.complex_eval_slice_size,
     )
     val_metrics = _metric_results_to_dict(val_results)
     print(val_metrics)
@@ -487,7 +512,8 @@ def _run_complex_kge(args: argparse.Namespace, start: float) -> None:
         mapped_triples=test_tf.mapped_triples,
         additional_filter_triples=[train_tf.mapped_triples, valid_tf.mapped_triples],
         batch_size=args.complex_eval_batchsize,
-        device=device,
+        device=eval_device,
+        slice_size=args.complex_eval_slice_size,
     )
     test_metrics = _metric_results_to_dict(test_results)
     print(test_metrics)
@@ -683,6 +709,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             candidate_entities,
             all_pos,
             predict="tail",
+            batch_size=args.ranking_batchsize,
         )
         print(val_lp_tail)
 
@@ -693,6 +720,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             candidate_entities,
             all_pos,
             predict="head",
+            batch_size=args.ranking_batchsize,
         )
         print(val_lp_head)
 
@@ -703,6 +731,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             candidate_entities,
             all_pos,
             predict="tail",
+            batch_size=args.ranking_batchsize,
         )
         print(test_lp_tail)
 
@@ -713,6 +742,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             candidate_entities,
             all_pos,
             predict="head",
+            batch_size=args.ranking_batchsize,
         )
         print(test_lp_head)
 

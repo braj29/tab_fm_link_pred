@@ -1,7 +1,7 @@
 # metrics.py
 """Evaluation helpers for classification and link prediction."""
 
-from typing import Iterable, Mapping, Sequence, Dict, Tuple, Set
+from typing import Iterable, Mapping, Sequence, Dict, Tuple, Set, Optional
 
 import numpy as np
 import pandas as pd
@@ -70,6 +70,7 @@ def filtered_ranking_metrics_binary(
     hits_ks: Sequence[int] = (1, 3, 10),
     predict: str = "tail",
     show_progress: bool = True,
+    batch_size: Optional[int] = None,
 ) -> Mapping[str, float]:
     """Compute filtered MRR/MR/Hits@k for binary link prediction.
 
@@ -126,7 +127,26 @@ def filtered_ranking_metrics_binary(
             })
             filter_key = (relation, tail)
             gold_entity = head
-        scores = clf.predict_proba(candidates)[:, pos_index]
+        if batch_size is None or batch_size <= 0 or batch_size >= len(candidate_entities):
+            scores = clf.predict_proba(candidates)[:, pos_index]
+        else:
+            scores = np.empty(len(candidate_entities), dtype=float)
+            for start in range(0, len(candidate_entities), batch_size):
+                end = min(start + batch_size, len(candidate_entities))
+                chunk_entities = candidate_entities[start:end]
+                if predict == "tail":
+                    chunk_df = pd.DataFrame({
+                        "head": [head] * len(chunk_entities),
+                        "relation": [relation] * len(chunk_entities),
+                        "tail": list(chunk_entities),
+                    })
+                else:
+                    chunk_df = pd.DataFrame({
+                        "head": list(chunk_entities),
+                        "relation": [relation] * len(chunk_entities),
+                        "tail": [tail] * len(chunk_entities),
+                    })
+                scores[start:end] = clf.predict_proba(chunk_df)[:, pos_index]
 
         for other_entity in filter_map.get(filter_key, set()):
             if other_entity == gold_entity:
