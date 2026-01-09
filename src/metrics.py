@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.base import ClassifierMixin
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
-from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.metrics import f1_score, roc_auc_score, average_precision_score
 
 
 def classification_accuracy(
@@ -49,6 +49,7 @@ def binary_classification_metrics(
         "accuracy": float(accuracy_score(y, y_pred)),
         "f1": float(f1_score(y, y_pred)),
         "roc_auc": float(roc_auc_score(y, y_score)),
+        "pr_auc": float(average_precision_score(y, y_score)),
     }
 
 
@@ -71,6 +72,8 @@ def filtered_ranking_metrics_binary(
     predict: str = "tail",
     show_progress: bool = True,
     batch_size: Optional[int] = None,
+    max_candidates: Optional[int] = None,
+    seed: int = 42,
 ) -> Mapping[str, float]:
     """Compute filtered MRR/MR/Hits@k for binary link prediction.
 
@@ -96,7 +99,10 @@ def filtered_ranking_metrics_binary(
         for key, head in zip(keys, positives["head"], strict=False):
             head_map.setdefault(key, set()).add(head)
         filter_map = head_map
-    entity_to_idx = {ent: idx for idx, ent in enumerate(candidate_entities)}
+    use_sampling = max_candidates is not None and max_candidates > 0 and max_candidates < len(candidate_entities)
+    rng = np.random.default_rng(seed) if use_sampling else None
+    if not use_sampling:
+        entity_to_idx = {ent: idx for idx, ent in enumerate(candidate_entities)}
 
     ranks = []
     hits = {k: 0 for k in hits_ks}
@@ -112,28 +118,48 @@ def filtered_ranking_metrics_binary(
 
     for head, relation, tail in iterator:
         if predict == "tail":
-            candidates = pd.DataFrame({
-                "head": [head] * len(candidate_entities),
-                "relation": [relation] * len(candidate_entities),
-                "tail": list(candidate_entities),
-            })
             filter_key = (head, relation)
             gold_entity = tail
         else:
-            candidates = pd.DataFrame({
-                "head": list(candidate_entities),
-                "relation": [relation] * len(candidate_entities),
-                "tail": [tail] * len(candidate_entities),
-            })
             filter_key = (relation, tail)
             gold_entity = head
-        if batch_size is None or batch_size <= 0 or batch_size >= len(candidate_entities):
+
+        if use_sampling:
+            if gold_entity not in candidate_entities:
+                continue
+            pool = [ent for ent in candidate_entities if ent != gold_entity]
+            sample_size = max_candidates - 1
+            if sample_size <= 0:
+                continue
+            if sample_size >= len(pool):
+                sampled = pool
+            else:
+                sampled = rng.choice(pool, size=sample_size, replace=False).tolist()
+            cand_entities = [gold_entity] + sampled
+            entity_to_idx = {ent: idx for idx, ent in enumerate(cand_entities)}
+        else:
+            cand_entities = list(candidate_entities)
+
+        if predict == "tail":
+            candidates = pd.DataFrame({
+                "head": [head] * len(cand_entities),
+                "relation": [relation] * len(cand_entities),
+                "tail": cand_entities,
+            })
+        else:
+            candidates = pd.DataFrame({
+                "head": cand_entities,
+                "relation": [relation] * len(cand_entities),
+                "tail": [tail] * len(cand_entities),
+            })
+
+        if batch_size is None or batch_size <= 0 or batch_size >= len(cand_entities):
             scores = clf.predict_proba(candidates)[:, pos_index]
         else:
-            scores = np.empty(len(candidate_entities), dtype=float)
-            for start in range(0, len(candidate_entities), batch_size):
-                end = min(start + batch_size, len(candidate_entities))
-                chunk_entities = candidate_entities[start:end]
+            scores = np.empty(len(cand_entities), dtype=float)
+            for start in range(0, len(cand_entities), batch_size):
+                end = min(start + batch_size, len(cand_entities))
+                chunk_entities = cand_entities[start:end]
                 if predict == "tail":
                     chunk_df = pd.DataFrame({
                         "head": [head] * len(chunk_entities),
@@ -168,6 +194,86 @@ def filtered_ranking_metrics_binary(
 
     if not ranks:
         raise ValueError("No valid ranks computed (check candidate entities list).")
+
+    ranks_arr = np.array(ranks, dtype=float)
+    metrics = {
+        "MRR": float(np.mean(1.0 / ranks_arr)),
+        "MR": float(np.mean(ranks_arr)),
+    }
+    for k in hits_ks:
+        metrics[f"Hits@{k}"] = hits[k] / len(ranks_arr)
+    return metrics
+
+
+def sampled_ranking_metrics_binary(
+    clf: ClassifierMixin,
+    triples: pd.DataFrame,
+    candidate_entities: Sequence[str],
+    positives: pd.DataFrame,
+    n_neg_per_pos: int,
+    hits_ks: Sequence[int] = (1, 3, 10),
+    predict: str = "tail",
+    seed: int = 42,
+    max_tries: int = 50,
+    show_progress: bool = True,
+) -> Mapping[str, float]:
+    """Compute MRR/Hits@k by ranking each positive among sampled negatives."""
+
+    if 1 not in clf.classes_:
+        raise ValueError("Classifier does not expose label 1 for positive class.")
+    pos_index = int(list(clf.classes_).index(1))
+    if predict not in {"tail", "head"}:
+        raise ValueError("predict must be 'tail' or 'head'")
+
+    rng = np.random.default_rng(seed)
+    positives_set = set(positives.itertuples(index=False, name=None))
+    entity_pool = list(candidate_entities)
+
+    ranks = []
+    hits = {k: 0 for k in hits_ks}
+
+    iterator = triples.itertuples(index=False, name=None)
+    if show_progress:
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            tqdm = None
+        if tqdm is not None:
+            iterator = tqdm(iterator, total=len(triples), desc=f"ranking-sampled/{predict}")
+
+    for head, relation, tail in iterator:
+        negatives: list[tuple[str, str, str]] = []
+        for _ in range(n_neg_per_pos):
+            found = False
+            for _ in range(max_tries):
+                corrupt_entity = rng.choice(entity_pool)
+                if predict == "tail":
+                    if corrupt_entity == tail:
+                        continue
+                    candidate = (head, relation, corrupt_entity)
+                else:
+                    if corrupt_entity == head:
+                        continue
+                    candidate = (corrupt_entity, relation, tail)
+                if candidate not in positives_set:
+                    negatives.append(candidate)
+                    found = True
+                    break
+            if not found:
+                break
+
+        candidates = [(head, relation, tail)] + negatives
+        cand_df = pd.DataFrame(candidates, columns=["head", "relation", "tail"])
+        scores = clf.predict_proba(cand_df)[:, pos_index]
+        gold_score = scores[0]
+        rank = int((scores > gold_score).sum()) + 1
+        ranks.append(rank)
+        for k in hits_ks:
+            if rank <= k:
+                hits[k] += 1
+
+    if not ranks:
+        raise ValueError("No valid sampled ranks computed.")
 
     ranks_arr = np.array(ranks, dtype=float)
     metrics = {

@@ -17,7 +17,11 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from data import load_splits, prepare_data
-from metrics import binary_classification_metrics, filtered_ranking_metrics_binary
+from metrics import (
+    binary_classification_metrics,
+    filtered_ranking_metrics_binary,
+    sampled_ranking_metrics_binary,
+)
 
 _model_path = SRC_DIR / "model.py"
 _spec = importlib.util.spec_from_file_location("tab_fm_model", _model_path)
@@ -90,8 +94,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--n-neg-per-pos",
         type=int,
-        default=1,
-        help="Number of negatives to sample per positive triple.",
+        default=5,
+        help="Number of negatives to sample per positive triple for training.",
+    )
+    parser.add_argument(
+        "--n-neg-eval",
+        type=int,
+        default=100,
+        help="Negatives per positive for validation/test evaluation.",
     )
     parser.add_argument(
         "--no-filter-unseen",
@@ -126,6 +136,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=512,
         help="Batch size for ranking evaluation candidate scoring.",
+    )
+    parser.add_argument(
+        "--max-candidates",
+        type=int,
+        default=2000,
+        help="Max candidate entities per ranking query (None for full set).",
+    )
+    parser.add_argument(
+        "--candidate-seed",
+        type=int,
+        default=42,
+        help="RNG seed for candidate sampling.",
+    )
+    parser.add_argument(
+        "--sampled-ranking-metrics",
+        action="store_true",
+        help="Compute ranking metrics by ranking positives among sampled negatives.",
+    )
+    parser.add_argument(
+        "--sampled-ranking-negatives",
+        type=int,
+        default=None,
+        help="Negatives per positive for sampled ranking (defaults to --n-neg-eval).",
     )
     parser.set_defaults(classification_metrics=True)
     parser.add_argument(
@@ -564,6 +597,7 @@ def run_experiment(args: argparse.Namespace) -> None:
             max_valid=max_valid,
             max_test=max_test,
             n_neg_per_pos=args.n_neg_per_pos,
+            n_neg_per_pos_eval=args.n_neg_eval,
             filter_unseen=not args.no_filter_unseen,
             hard_negatives=args.hard_negatives,
             corrupt_head_prob=args.corrupt_head_prob,
@@ -710,6 +744,8 @@ def run_experiment(args: argparse.Namespace) -> None:
             all_pos,
             predict="tail",
             batch_size=args.ranking_batchsize,
+            max_candidates=args.max_candidates,
+            seed=args.candidate_seed,
         )
         print(val_lp_tail)
 
@@ -721,6 +757,8 @@ def run_experiment(args: argparse.Namespace) -> None:
             all_pos,
             predict="head",
             batch_size=args.ranking_batchsize,
+            max_candidates=args.max_candidates,
+            seed=args.candidate_seed,
         )
         print(val_lp_head)
 
@@ -732,6 +770,8 @@ def run_experiment(args: argparse.Namespace) -> None:
             all_pos,
             predict="tail",
             batch_size=args.ranking_batchsize,
+            max_candidates=args.max_candidates,
+            seed=args.candidate_seed,
         )
         print(test_lp_tail)
 
@@ -743,8 +783,60 @@ def run_experiment(args: argparse.Namespace) -> None:
             all_pos,
             predict="head",
             batch_size=args.ranking_batchsize,
+            max_candidates=args.max_candidates,
+            seed=args.candidate_seed,
         )
         print(test_lp_head)
+
+        if args.sampled_ranking_metrics:
+            sampled_neg = (
+                args.n_neg_eval
+                if args.sampled_ranking_negatives is None
+                else args.sampled_ranking_negatives
+            )
+            print("=== Validation sampled ranking metrics (tail prediction) ===")
+            val_lp_tail_sampled = sampled_ranking_metrics_binary(
+                clf,
+                valid_pos,
+                candidate_entities,
+                all_pos,
+                n_neg_per_pos=sampled_neg,
+                predict="tail",
+            )
+            print(val_lp_tail_sampled)
+
+            print("=== Validation sampled ranking metrics (head prediction) ===")
+            val_lp_head_sampled = sampled_ranking_metrics_binary(
+                clf,
+                valid_pos,
+                candidate_entities,
+                all_pos,
+                n_neg_per_pos=sampled_neg,
+                predict="head",
+            )
+            print(val_lp_head_sampled)
+
+            print("=== Test sampled ranking metrics (tail prediction) ===")
+            test_lp_tail_sampled = sampled_ranking_metrics_binary(
+                clf,
+                test_pos,
+                candidate_entities,
+                all_pos,
+                n_neg_per_pos=sampled_neg,
+                predict="tail",
+            )
+            print(test_lp_tail_sampled)
+
+            print("=== Test sampled ranking metrics (head prediction) ===")
+            test_lp_head_sampled = sampled_ranking_metrics_binary(
+                clf,
+                test_pos,
+                candidate_entities,
+                all_pos,
+                n_neg_per_pos=sampled_neg,
+                predict="head",
+            )
+            print(test_lp_head_sampled)
 
         metrics = {
             "model": args.model,
@@ -762,6 +854,11 @@ def run_experiment(args: argparse.Namespace) -> None:
         if args.classification_metrics:
             metrics["val_classification"] = val_cls
             metrics["test_classification"] = test_cls
+        if args.sampled_ranking_metrics:
+            metrics["val_sampled_link_prediction_tail"] = val_lp_tail_sampled
+            metrics["val_sampled_link_prediction_head"] = val_lp_head_sampled
+            metrics["test_sampled_link_prediction_tail"] = test_lp_tail_sampled
+            metrics["test_sampled_link_prediction_head"] = test_lp_head_sampled
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(metrics, indent=2))

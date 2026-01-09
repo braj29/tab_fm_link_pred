@@ -234,6 +234,7 @@ def prepare_data(
     max_valid: Optional[int] = None,
     max_test: Optional[int] = None,
     n_neg_per_pos: int = 1,
+    n_neg_per_pos_eval: Optional[int] = None,
     filter_unseen: bool = True,
     hard_negatives: bool = False,
     corrupt_head_prob: float = 0.5,
@@ -277,6 +278,8 @@ def prepare_data(
     test_pos = test.copy()
     test_pos["label"] = 1
 
+    eval_neg = n_neg_per_pos if n_neg_per_pos_eval is None else n_neg_per_pos_eval
+
     train_neg = _negative_sample_split(
         train,
         train_entities,
@@ -294,7 +297,7 @@ def prepare_data(
         valid,
         train_entities,
         positives_train,
-        n_neg_per_pos=n_neg_per_pos,
+        n_neg_per_pos=eval_neg,
         seed=seed + 1,
         split_name="valid",
         relation_tail_pool=relation_tail_pool,
@@ -307,7 +310,7 @@ def prepare_data(
         test,
         train_entities,
         positives_train,
-        n_neg_per_pos=n_neg_per_pos,
+        n_neg_per_pos=eval_neg,
         seed=seed + 2,
         split_name="test",
         relation_tail_pool=relation_tail_pool,
