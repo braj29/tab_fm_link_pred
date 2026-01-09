@@ -45,13 +45,15 @@ spec:
               curl -LsSf https://astral.sh/uv/install.sh | sh
               echo "Step 4: clone repo"
               git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred
-              echo "Step 5: uv sync"
+              echo "Step 5: clone TAG"
+              git clone https://github.com/ahayler/tag /workspace/tag
+              echo "Step 6: uv sync"
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
-              echo "Step 6: install tag deps"
-              /root/.local/bin/uv pip install -r /workspace/tab_fm_link_pred/tag/requirements.txt
-              echo "Step 7: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tag --tag-path /workspace/tab_fm_link_pred/tag --tag-base-model tabicl --tag-max-train-rows 10000 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tag.json
+              echo "Step 7: install tag deps"
+              /root/.local/bin/uv pip install -r /workspace/tag/requirements.txt
+              echo "Step 8: run experiment"
+              /root/.local/bin/uv run python -u main.py --model tag --tag-path /workspace/tag --tag-base-model tabicl --tag-max-train-rows 10000 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tag.json
           resources:
             limits:
               cpu: 2

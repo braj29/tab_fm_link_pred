@@ -45,15 +45,17 @@ spec:
               curl -LsSf https://astral.sh/uv/install.sh | sh
               echo "Step 4: clone repo"
               git clone https://github.com/braj29/tab_fm_link_pred /workspace/tab_fm_link_pred
-              echo "Step 5: uv sync"
+              echo "Step 5: clone TAG"
+              git clone https://github.com/ahayler/tag /workspace/tag
+              echo "Step 6: uv sync"
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
-              echo "Step 6: install TAG deps"
-              /root/.local/bin/uv pip install -r /workspace/tab_fm_link_pred/tag/requirements.txt
-              echo "Step 7: install graph deps"
+              echo "Step 7: install TAG deps"
+              /root/.local/bin/uv pip install -r /workspace/tag/requirements.txt
+              echo "Step 8: install graph deps"
               /root/.local/bin/uv pip install dgl torch_geometric
-              echo "Step 8: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tag-graph --tag-path /workspace/tab_fm_link_pred/tag --tag-base-model tabicl --tag-graph-features X,L1,L2,L3,L4,RW20,LE20 --tag-graph-hops 4 --max-train 5000 --max-valid 1000 --max-test 1000 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tag_graph.json
+              echo "Step 9: run experiment"
+              /root/.local/bin/uv run python -u main.py --model tag-graph --tag-path /workspace/tag --tag-base-model tabicl --tag-graph-features X,L1,L2,L3,L4,RW20,LE20 --tag-graph-hops 4 --max-train 5000 --max-valid 1000 --max-test 1000 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tag_graph.json
           resources:
             limits:
               cpu: 2
