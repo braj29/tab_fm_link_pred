@@ -53,7 +53,7 @@ spec:
               echo "Step 7: install tag deps"
               /root/.local/bin/uv pip install -r /workspace/tag/requirements.txt
               echo "Step 8: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tag --tag-path /workspace/tag --tag-base-model tabicl --tag-max-train-rows 10000 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tag.json
+              /root/.local/bin/uv run python -u main.py --model tag --tag-path /workspace/tag --tag-base-model tabicl --tag-max-train-rows 10000 --ranking-batchsize 256 --n-neg-eval 20 --output /workspace/tab_fm_link_pred/experiment_metrics_tag.json
           resources:
             limits:
               cpu: 2

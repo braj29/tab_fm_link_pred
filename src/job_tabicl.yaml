@@ -50,7 +50,7 @@ spec:
               /root/.local/bin/uv sync --frozen
               /root/.local/bin/uv pip install huggingface_hub
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tabicl --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tabicl_1000.json
+              /root/.local/bin/uv run python -u main.py --model tabicl --n-neg-eval 20 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tabicl_1000.json
           resources:
             limits:
               cpu: 1

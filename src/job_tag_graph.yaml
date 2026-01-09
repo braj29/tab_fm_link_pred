@@ -58,7 +58,7 @@ spec:
               echo "Step 8: install graph deps"
               /root/.local/bin/uv pip install dgl torch_geometric
               echo "Step 9: run experiment"
-              /root/.local/bin/uv run python -u main.py --model tag-graph --tag-path /workspace/tag --tag-base-model tabicl --tag-graph-features X,L1,L2 --tag-graph-node-dim 32 --tag-graph-relation-dim 16 --tag-graph-hops 4 --max-train 5000 --max-valid 1000 --max-test 1000 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tag_graph.json
+              /root/.local/bin/uv run python -u main.py --model tag-graph --tag-path /workspace/tag --tag-base-model tabicl --tag-graph-features X,L1,L2 --tag-graph-node-dim 32 --tag-graph-relation-dim 16 --tag-graph-hops 4 --max-train 5000 --max-valid 1000 --max-test 1000 --ranking-batchsize 256 --n-neg-eval 20 --output /workspace/tab_fm_link_pred/experiment_metrics_tag_graph.json
           resources:
             limits:
               cpu: 2

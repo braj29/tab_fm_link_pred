@@ -50,7 +50,7 @@ spec:
               /root/.local/bin/uv sync --frozen
               /root/.local/bin/uv pip install pykeen
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model complex-kge --complex-epochs 100 --complex-dim 200 --complex-batchsize 1024 --complex-eval-batchsize 128 --complex-eval-slice-size 128 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_complex_kge.json
+              /root/.local/bin/uv run python -u main.py --model complex-kge --complex-epochs 100 --complex-dim 200 --complex-batchsize 1024 --complex-eval-batchsize 128 --complex-eval-slice-size 128 --ranking-batchsize 256 --n-neg-eval 20 --output /workspace/tab_fm_link_pred/experiment_metrics_complex_kge.json
           resources:
             limits:
               cpu: 2

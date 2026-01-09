@@ -58,7 +58,7 @@ spec:
               /root/.local/bin/uv pip install faiss-cpu
               echo "Step 7: run experiment"
               cd /workspace/tab_fm_link_pred
-              /root/.local/bin/uv run python -u main.py --model tabdpt --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_tabdpt_full.json
+              /root/.local/bin/uv run python -u main.py --model tabdpt --ranking-batchsize 256 --n-neg-eval 20 --output /workspace/tab_fm_link_pred/experiment_metrics_tabdpt_full.json
           resources:
             limits:
               cpu: 1

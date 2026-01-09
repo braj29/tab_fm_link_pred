@@ -50,7 +50,7 @@ spec:
               /root/.local/bin/uv sync --frozen
               /root/.local/bin/uv pip install pykeen
               echo "Step 6: run experiment"
-              /root/.local/bin/uv run python -u main.py --model rotatee --rotatee-epochs 100 --rotatee-dim 200 --rotatee-batchsize 1024 --ranking-batchsize 256 --output /workspace/tab_fm_link_pred/experiment_metrics_rotatee.json
+              /root/.local/bin/uv run python -u main.py --model rotatee --rotatee-epochs 100 --rotatee-dim 200 --rotatee-batchsize 1024 --ranking-batchsize 256 --n-neg-eval 20 --output /workspace/tab_fm_link_pred/experiment_metrics_rotatee.json
           resources:
             limits:
               cpu: 2
