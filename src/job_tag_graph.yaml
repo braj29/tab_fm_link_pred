@@ -49,7 +49,7 @@ spec:
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
               echo "Step 6: install TAG deps"
-              /root/.local/bin/uv pip install -r /workspace/tab_fm_link_pred/tag/requirements.txt
+              /root/.local/bin/uv pip install -r /tag/requirements.txt
               echo "Step 7: install graph deps"
               /root/.local/bin/uv pip install dgl torch_geometric
               echo "Step 8: run experiment"
