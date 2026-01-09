@@ -32,6 +32,8 @@ spec:
                   key: token
             - name: HF_HOME
               value: /workspace/.cache/huggingface
+            - name: DGLBACKEND
+              value: "pytorch"
           command:
             - /bin/bash
             - -lc
@@ -50,8 +52,9 @@ spec:
               echo "Step 6: uv sync"
               cd /workspace/tab_fm_link_pred
               /root/.local/bin/uv sync --frozen
-              echo "Step 7: install TAG deps"
-              /root/.local/bin/uv pip install -r /workspace/tag/requirements.txt
+              echo "Step 7: install TAG deps (exclude torch/numpy/cuda)"
+              grep -vE '^(torch|torchvision|torchaudio|numpy|nvidia-|triton)' /workspace/tag/requirements.txt > /tmp/tag_requirements.txt
+              /root/.local/bin/uv pip install -r /tmp/tag_requirements.txt
               echo "Step 8: install graph deps"
               /root/.local/bin/uv pip install dgl torch_geometric
               echo "Step 9: run experiment"

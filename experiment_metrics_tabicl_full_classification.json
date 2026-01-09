@@ -1,0 +1,18 @@
+{
+  "model": "tabicl",
+  "device": "auto",
+  "max_train": null,
+  "max_valid": null,
+  "max_test": null,
+  "overfit_small": false,
+  "val_classification": {
+    "accuracy": 0.6384799726121191,
+    "f1": 0.6670520231213873,
+    "roc_auc": 0.6955815919613357
+  },
+  "test_classification": {
+    "accuracy": 0.6382473823270378,
+    "f1": 0.6666666666666666,
+    "roc_auc": 0.6950986910488466
+  }
+}
